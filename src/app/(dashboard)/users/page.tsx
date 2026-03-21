@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { supabaseAdmin } from '@/lib/supabase/admin'
+import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { Header } from '@/components/layout/Header'
 import { Card } from '@/components/ui/Card'
@@ -42,7 +42,7 @@ export default async function UsersPage() {
 
   const [{ data: profiles }, { data: invitations }] = await Promise.all([
     supabase.from('profiles').select('*').order('created_at', { ascending: false }),
-    supabaseAdmin
+    getSupabaseAdmin()
       .from('invitations')
       .select('id, email, role, created_at, expires_at, used_at')
       .is('used_at', null)

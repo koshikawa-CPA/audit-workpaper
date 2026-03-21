@@ -1,20 +1,18 @@
 import { createClient } from '@/lib/supabase/server'
-import { Header } from '@/components/layout/Header'
-import { WorkpaperCard } from '@/components/workpaper/WorkpaperCard'
+import { ThreeLayerTabs } from '@/components/workpaper/ThreeLayerTabs'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
-import type { Workpaper, Profile, AuditProject } from '@/types'
+import { ProjectSelector } from './ProjectSelector'
+import type { Profile, AuditProject } from '@/types'
 import Link from 'next/link'
-import { Plus, FileText, Filter } from 'lucide-react'
-import { WorkpapersFilter } from './WorkpapersFilter'
+import { Plus, FolderOpen } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
 interface PageProps {
   searchParams: {
     project_id?: string
-    status?: string
-    search?: string
+    view?: string
   }
 }
 
@@ -33,110 +31,90 @@ export default async function WorkpapersPage({ searchParams }: PageProps) {
     .eq('id', user.id)
     .single()
 
-  // Build query
-  let query = supabase
-    .from('workpapers')
-    .select(`
-      *,
-      project:audit_projects(id, name, fiscal_year, status),
-      assigned_creator_profile:profiles!workpapers_assigned_creator_fkey(id, full_name, email, role),
-      assigned_reviewer_profile:profiles!workpapers_assigned_reviewer_fkey(id, full_name, email, role),
-      creator_checked_by_profile:profiles!workpapers_creator_checked_by_fkey(id, full_name),
-      reviewer_checked_by_profile:profiles!workpapers_reviewer_checked_by_fkey(id, full_name),
-      files:workpaper_files(id)
-    `)
-    .order('workpaper_number', { ascending: true })
-
-  if (searchParams.project_id) {
-    query = query.eq('project_id', searchParams.project_id)
-  }
-
-  if (searchParams.status) {
-    query = query.eq('status', searchParams.status)
-  }
-
-  const { data: workpapers } = await query
   const { data: projects } = await supabase
     .from('audit_projects')
-    .select('id, name, fiscal_year, status')
+    .select('id, name, fiscal_year, status, description, locked_at, locked_by, created_by, created_at, updated_at')
     .order('created_at', { ascending: false })
 
-  let filteredWorkpapers = (workpapers || []) as Workpaper[]
+  const allProjects = (projects || []) as AuditProject[]
 
-  // Client-side text search
-  if (searchParams.search) {
-    const searchLower = searchParams.search.toLowerCase()
-    filteredWorkpapers = filteredWorkpapers.filter(
-      (w) =>
-        w.title.toLowerCase().includes(searchLower) ||
-        w.workpaper_number.toLowerCase().includes(searchLower) ||
-        (w.category?.toLowerCase() || '').includes(searchLower)
-    )
-  }
+  // Determine selected project
+  const selectedProjectId = searchParams.project_id || allProjects[0]?.id
+  const selectedProject = allProjects.find(p => p.id === selectedProjectId) ?? allProjects[0]
 
   const canCreate =
     (profile as Profile)?.role === 'creator' ||
     (profile as Profile)?.role === 'admin'
 
-  return (
-    <div>
-      <Header title="調書一覧" profile={profile as Profile} />
-
-      <div className="p-6 space-y-4">
-        {/* Filter bar */}
-        <WorkpapersFilter
-          projects={(projects || []) as AuditProject[]}
-          currentFilters={searchParams}
-        />
-
-        {/* Action bar */}
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-500">
-            {filteredWorkpapers.length} 件の調書
-          </p>
-          {canCreate && (
-            <Link href="/workpapers/new">
-              <Button>
-                <Plus className="h-4 w-4" />
-                新規作成
-              </Button>
-            </Link>
-          )}
+  // No projects case
+  if (allProjects.length === 0) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        <div className="bg-white border-b border-gray-200 px-6 py-3 shrink-0">
+          <h1 className="text-lg font-semibold text-gray-900">調書一覧</h1>
         </div>
-
-        {/* Workpapers list */}
-        {filteredWorkpapers.length === 0 ? (
-          <Card padding="lg" className="text-center">
-            <FileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+        <div className="flex-1 flex items-center justify-center p-6">
+          <Card padding="lg" className="text-center max-w-sm">
+            <FolderOpen className="h-12 w-12 text-gray-300 mx-auto mb-3" />
             <h3 className="text-base font-medium text-gray-900 mb-1">
-              調書がありません
+              プロジェクトがありません
             </h3>
             <p className="text-sm text-gray-500 mb-4">
-              {searchParams.status || searchParams.project_id || searchParams.search
-                ? 'フィルター条件に一致する調書はありません'
-                : 'まだ調書が作成されていません'}
+              調書を管理するにはプロジェクトを作成してください
             </p>
-            {canCreate && (
-              <Link href="/workpapers/new">
+            {(profile as Profile)?.role === 'admin' && (
+              <Link href="/projects/new">
                 <Button>
                   <Plus className="h-4 w-4" />
-                  最初の調書を作成
+                  プロジェクトを作成
                 </Button>
               </Link>
             )}
           </Card>
-        ) : (
-          <div className="space-y-3">
-            {filteredWorkpapers.map((workpaper) => (
-              <WorkpaperCard
-                key={workpaper.id}
-                workpaper={workpaper}
-                isProjectLocked={workpaper.project?.status === 'locked'}
-              />
-            ))}
-          </div>
-        )}
+        </div>
       </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Header with project selector */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 shrink-0 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <h1 className="text-lg font-semibold text-gray-900">調書一覧</h1>
+          <ProjectSelector projects={allProjects} selectedProjectId={selectedProjectId ?? ''} />
+          {selectedProject?.status === 'locked' && (
+            <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-full border border-amber-200">
+              ロック済み
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {canCreate && selectedProject?.status !== 'locked' && (
+            <Link href={`/workpapers/new${selectedProjectId ? `?project_id=${selectedProjectId}` : ''}`}>
+              <Button size="sm">
+                <Plus className="h-3.5 w-3.5" />
+                新規調書
+              </Button>
+            </Link>
+          )}
+          <span className="text-sm text-gray-500">{profile ? (profile as Profile).full_name : ''}</span>
+        </div>
+      </div>
+
+      {/* 3-Layer tabs */}
+      {selectedProject ? (
+        <div className="flex-1 overflow-hidden">
+          <ThreeLayerTabs
+            project={selectedProject}
+            profile={profile as Profile}
+          />
+        </div>
+      ) : (
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-gray-400 text-sm">プロジェクトを選択してください</p>
+        </div>
+      )}
     </div>
   )
 }

@@ -75,17 +75,37 @@
     @apply border-gray-200 my-6;
   }
 
-  /* TipTap table styles */
-  .ProseMirror table {
-    @apply border-collapse border border-gray-300 w-full my-4;
+  /* TipTap table styles — borders always visible in both edit and read-only mode */
+  .ProseMirror table,
+  .prose table {
+    border-collapse: collapse !important;
+    border: 1px solid #d1d5db !important;
+    width: 100%;
+    margin: 1rem 0;
+    table-layout: auto;
   }
 
-  .ProseMirror th {
-    @apply bg-gray-100 border border-gray-300 px-3 py-2 text-left font-semibold text-sm;
+  .ProseMirror th,
+  .prose th {
+    background-color: #f3f4f6;
+    border: 1px solid #d1d5db !important;
+    padding: 6px 12px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.875rem;
   }
 
-  .ProseMirror td {
-    @apply border border-gray-300 px-3 py-2 text-sm;
+  .ProseMirror td,
+  .prose td {
+    border: 1px solid #d1d5db !important;
+    padding: 6px 12px;
+    font-size: 0.875rem;
+    min-width: 40px;
+  }
+
+  .ProseMirror tr,
+  .prose tr {
+    border: 1px solid #d1d5db !important;
   }
 
   .ProseMirror .selectedCell:after {

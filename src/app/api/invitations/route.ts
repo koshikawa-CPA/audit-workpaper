@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { supabaseAdmin } from '@/lib/supabase/admin'
+import { getSupabaseAdmin } from '@/lib/supabase/admin'
 
 // ----------------------------------------------------------------
 // POST /api/invitations  — 管理者が招待を作成
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
   }
 
   // 既存ユーザーチェック
-  const { data: existingProfile } = await supabaseAdmin
+  const { data: existingProfile } = await getSupabaseAdmin()
     .from('profiles')
     .select('id')
     .eq('email', email)
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
   }
 
   // 有効な招待が既に存在するかチェック
-  const { data: existingInvite } = await supabaseAdmin
+  const { data: existingInvite } = await getSupabaseAdmin()
     .from('invitations')
     .select('id')
     .eq('email', email)
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
   }
 
   // 招待レコード作成
-  const { data: invitation, error: insertError } = await supabaseAdmin
+  const { data: invitation, error: insertError } = await getSupabaseAdmin()
     .from('invitations')
     .insert({ email, role, invited_by: user.id })
     .select()
@@ -88,14 +88,14 @@ export async function POST(request: NextRequest) {
     process.env.NEXT_PUBLIC_SITE_URL ??
     'http://localhost:3000'
 
-  const { error: emailError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+  const { error: emailError } = await getSupabaseAdmin().auth.admin.inviteUserByEmail(
     email,
     { redirectTo: `${origin}/auth/accept-invite` }
   )
 
   if (emailError) {
     // ロールバック
-    await supabaseAdmin.from('invitations').delete().eq('id', invitation.id)
+    await getSupabaseAdmin().from('invitations').delete().eq('id', invitation.id)
     return NextResponse.json(
       { error: `招待メールの送信に失敗しました: ${emailError.message}` },
       { status: 500 }
@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: '管理者のみ実行できます' }, { status: 403 })
   }
 
-  const { data: invitations, error } = await supabaseAdmin
+  const { data: invitations, error } = await getSupabaseAdmin()
     .from('invitations')
     .select(
       `id, email, role, created_at, expires_at, used_at,

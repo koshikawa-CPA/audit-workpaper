@@ -139,6 +139,18 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   admin: '管理者',
 }
 
+// Tab structure types for 3-layer OneNote-style navigation
+export interface TabItem {
+  id: string
+  title: string
+}
+
+export interface TabConfig {
+  layer1: TabItem[]
+  layer2: Record<string, TabItem[]>   // key = l1_id
+  layer3: Record<string, TabItem[]>   // key = `${l1_id}__${l2_id}`
+}
+
 // Status colors for badges
 export const STATUS_COLORS: Record<WorkpaperStatus, string> = {
   not_started: 'gray',

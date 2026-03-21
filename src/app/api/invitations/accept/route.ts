@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { supabaseAdmin } from '@/lib/supabase/admin'
+import { getSupabaseAdmin } from '@/lib/supabase/admin'
 
 // ----------------------------------------------------------------
 // POST /api/invitations/accept  — 招待を受け入れてプロフィールを確定
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
   }
 
   // 有効な招待を検索 (メールアドレスで)
-  const { data: invitation, error: inviteError } = await supabaseAdmin
+  const { data: invitation, error: inviteError } = await getSupabaseAdmin()
     .from('invitations')
     .select('id, role')
     .eq('email', userEmail)
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
   }
 
   // プロフィールを更新 (氏名 + 招待ロール)
-  const { error: profileError } = await supabaseAdmin
+  const { error: profileError } = await getSupabaseAdmin()
     .from('profiles')
     .update({ full_name: full_name.trim(), role: invitation.role })
     .eq('id', user.id)
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
   }
 
   // 招待を使用済みにする
-  await supabaseAdmin
+  await getSupabaseAdmin()
     .from('invitations')
     .update({ used_at: new Date().toISOString() })
     .eq('id', invitation.id)

@@ -13,7 +13,9 @@
       "Bash(head -5 \"/home/cosy/audit-workpaper/src/app/\\(dashboard\\)/dashboard/page.tsx\")",
       "Bash(head -5 \"/home/cosy/audit-workpaper/src/app/\\(dashboard\\)/workpapers/page.tsx\")",
       "Bash(head -5 \"/home/cosy/audit-workpaper/src/app/\\(dashboard\\)/layout.tsx\")",
-      "Read(//home/cosy/audit-workpaper/**)"
+      "Read(//home/cosy/audit-workpaper/**)",
+      "Bash(npx next:*)",
+      "Bash(grep -r \"tiptap\\\\|TipTap\" /home/cosy/audit-workpaper/src --include=*.ts --include=*.tsx)"
     ]
   }
 }
