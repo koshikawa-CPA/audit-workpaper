@@ -1,14 +1,25 @@
 import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { Header } from '@/components/layout/Header'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import type { Profile } from '@/types'
 import { ROLE_LABELS } from '@/types'
-import { Users, Calendar } from 'lucide-react'
+import { Users, Calendar, Mail, Clock } from 'lucide-react'
 import { UserRoleEditor } from './UserRoleEditor'
+import { InviteButton } from './InviteButton'
 
 export const dynamic = 'force-dynamic'
+
+interface Invitation {
+  id: string
+  email: string
+  role: string
+  created_at: string
+  expires_at: string
+  used_at: string | null
+}
 
 export default async function UsersPage() {
   const supabase = createClient()
@@ -29,10 +40,15 @@ export default async function UsersPage() {
     redirect('/dashboard')
   }
 
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('*')
-    .order('created_at', { ascending: false })
+  const [{ data: profiles }, { data: invitations }] = await Promise.all([
+    supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+    supabaseAdmin
+      .from('invitations')
+      .select('id, email, role, created_at, expires_at, used_at')
+      .is('used_at', null)
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false }),
+  ])
 
   const roleColors: Record<string, 'blue' | 'purple' | 'red'> = {
     creator: 'blue',
@@ -40,13 +56,14 @@ export default async function UsersPage() {
     admin: 'red',
   }
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('ja-JP', {
+  const formatDate = (dateStr: string) =>
+    new Date(dateStr).toLocaleDateString('ja-JP', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
     })
-  }
+
+  const pendingInvitations = (invitations ?? []) as Invitation[]
 
   return (
     <div>
@@ -57,7 +74,43 @@ export default async function UsersPage() {
           <p className="text-sm text-gray-500">
             {(profiles || []).length} 件のユーザー
           </p>
+          <InviteButton />
         </div>
+
+        {/* 保留中の招待 */}
+        {pendingInvitations.length > 0 && (
+          <Card padding="none">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-amber-500" />
+                <h3 className="text-sm font-medium text-gray-700">
+                  招待待ち ({pendingInvitations.length}件)
+                </h3>
+              </div>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {pendingInvitations.map((inv) => (
+                <div key={inv.id} className="px-6 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-7 w-7 rounded-full bg-amber-100 flex items-center justify-center">
+                      <Mail className="h-3.5 w-3.5 text-amber-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-900">{inv.email}</p>
+                      <div className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
+                        <Clock className="h-3 w-3" />
+                        有効期限: {formatDate(inv.expires_at)}
+                      </div>
+                    </div>
+                  </div>
+                  <Badge color={roleColors[inv.role] ?? 'gray'}>
+                    {ROLE_LABELS[inv.role as keyof typeof ROLE_LABELS]}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
 
         {/* Role legend */}
         <Card padding="md">
