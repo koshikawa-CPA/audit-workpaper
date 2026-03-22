@@ -14,11 +14,11 @@
   "/page": "app/page.js",
   "/(auth)/login/page": "app/(auth)/login/page.js",
   "/(dashboard)/projects/new/page": "app/(dashboard)/projects/new/page.js",
-  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
   "/(dashboard)/projects/page": "app/(dashboard)/projects/page.js",
-  "/(dashboard)/users/page": "app/(dashboard)/users/page.js",
+  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
   "/(dashboard)/workpapers/[id]/edit/page": "app/(dashboard)/workpapers/[id]/edit/page.js",
   "/(dashboard)/workpapers/new/page": "app/(dashboard)/workpapers/new/page.js",
-  "/(dashboard)/workpapers/page": "app/(dashboard)/workpapers/page.js",
-  "/(dashboard)/workpapers/[id]/page": "app/(dashboard)/workpapers/[id]/page.js"
+  "/(dashboard)/users/page": "app/(dashboard)/users/page.js",
+  "/(dashboard)/workpapers/[id]/page": "app/(dashboard)/workpapers/[id]/page.js",
+  "/(dashboard)/workpapers/page": "app/(dashboard)/workpapers/page.js"
 }
