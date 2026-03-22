@@ -60,17 +60,6 @@ export interface Workpaper {
   files?: WorkpaperFile[]
 }
 
-export interface WorkpaperReference {
-  id: string
-  from_workpaper_id: string
-  to_workpaper_id: string
-  created_by: string
-  created_at: string
-  // Joined
-  from_workpaper?: Pick<Workpaper, 'id' | 'title' | 'workpaper_number' | 'status'>
-  to_workpaper?: Pick<Workpaper, 'id' | 'title' | 'workpaper_number' | 'status'>
-}
-
 export interface WorkpaperFile {
   id: string
   workpaper_id: string

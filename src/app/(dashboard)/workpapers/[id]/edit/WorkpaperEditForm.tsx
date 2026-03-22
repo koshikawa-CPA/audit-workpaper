@@ -88,7 +88,6 @@ export function WorkpaperEditForm({
             onSave={handleSave}
             placeholder="調書の内容を入力してください..."
             workpaperId={workpaper.id}
-            projectId={workpaper.project_id}
           />
         </div>
       )}
