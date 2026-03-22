@@ -11,7 +11,6 @@ import Table from '@tiptap/extension-table'
 import TableHeader from '@tiptap/extension-table-header'
 import Placeholder from '@tiptap/extension-placeholder'
 import { FormulaTableCell } from './FormulaTableCell'
-import { ResizableTableRow } from './ResizableTableRow'
 import {
   evaluateFormula,
   formatCellValue,
@@ -78,7 +77,6 @@ interface TableOverlayItem {
 
 const ROW_NUM_W = 28   // px width for row number column
 const COL_HDR_H = 20  // px height for column header row
-const BORDER_HIT = 6  // px proximity to detect resize zone
 
 // ─── Toolbar helpers ─────────────────────────────────────────────────────────
 
@@ -197,7 +195,6 @@ export function RichTextEditor({
       TextStyle,
       Color,
       Table.configure({ resizable: true }),
-      ResizableTableRow,
       TableHeader,
       FormulaTableCell,
       Placeholder.configure({ placeholder }),
@@ -375,158 +372,6 @@ export function RichTextEditor({
     }
   }, [cellContextMenu])
 
-  // ─── Resize cursor + row height drag ─────────────────────────────────────
-
-  useEffect(() => {
-    if (!editor || readOnly) return
-    const ed = editor
-    const dom = ed.view.dom as HTMLElement
-
-    let rowDrag: {
-      startY: number
-      startHeight: number
-      trEl: HTMLTableRowElement
-    } | null = null
-
-    function setCursor(c: string) { dom.style.cursor = c }
-
-    // ── Cursor feedback while hovering ───────────────────────────────────────
-
-    function onMouseMove(e: MouseEvent) {
-      if (rowDrag) return  // document-level handler owns cursor during drag
-
-      const target = e.target as HTMLElement
-
-      if (target.classList.contains('column-resize-handle') ||
-          !!target.closest('.column-resize-handle')) {
-        setCursor('col-resize')
-        return
-      }
-
-      const cell = target.closest('td, th') as HTMLElement | null
-      if (!cell) { setCursor(''); return }
-
-      const rect = cell.getBoundingClientRect()
-      if (e.clientY >= rect.bottom - BORDER_HIT) {
-        setCursor('row-resize')
-      } else if (e.clientX >= rect.right - BORDER_HIT) {
-        setCursor('col-resize')
-      } else {
-        setCursor('')
-      }
-    }
-
-    function onMouseLeave() { if (!rowDrag) setCursor('') }
-
-    // ── Row drag start ────────────────────────────────────────────────────────
-
-    function onMouseDown(e: MouseEvent) {
-      const target = e.target as HTMLElement
-      if (target.classList.contains('column-resize-handle') ||
-          !!target.closest('.column-resize-handle')) return
-
-      const cell = target.closest('td, th') as HTMLElement | null
-      if (!cell) return
-
-      const rect = cell.getBoundingClientRect()
-      // Only handle the bottom border of a row.
-      // Do NOT handle nearTop — the top of row N is the bottom of row N-1,
-      // which is already handled when that row's bottom is hovered.
-      if (e.clientY < rect.bottom - BORDER_HIT) return
-
-      const tr = cell.closest('tr') as HTMLTableRowElement | null
-      if (!tr) return
-
-      // ⚠️ Do NOT call e.preventDefault() here.
-      // preventDefault on mousedown prevents TipTap from properly placing the
-      // cursor, which leaves it in a half-processed state and causes multi-cell
-      // selection on subsequent clicks.
-      // Instead, user-select:none is applied in onDocMove to prevent text
-      // selection during the actual drag movement.
-
-      rowDrag = {
-        startY: e.clientY,
-        startHeight: tr.getBoundingClientRect().height,
-        trEl: tr,
-      }
-      document.addEventListener('mousemove', onDocMove)
-      document.addEventListener('mouseup', onDocUp)
-    }
-
-    // ── Drag in progress ──────────────────────────────────────────────────────
-
-    function onDocMove(e: MouseEvent) {
-      if (!rowDrag) return
-      e.preventDefault()  // prevent text selection during drag movement
-      document.body.style.userSelect = 'none'
-      document.body.style.cursor = 'row-resize'
-
-      const delta = e.clientY - rowDrag.startY
-      const newH = Math.max(20, rowDrag.startHeight + delta)
-
-      // Set height on <tr> AND on every cell — CSS `height` on <tr> alone is
-      // not reliable; the cells' height ultimately determines the row height.
-      rowDrag.trEl.style.height = newH + 'px'
-      for (const cell of Array.from(rowDrag.trEl.cells)) {
-        (cell as HTMLElement).style.height = newH + 'px'
-      }
-    }
-
-    // ── Drag end ──────────────────────────────────────────────────────────────
-
-    function onDocUp(e: MouseEvent) {
-      if (!rowDrag) return
-      document.removeEventListener('mousemove', onDocMove)
-      document.removeEventListener('mouseup', onDocUp)
-      document.body.style.userSelect = ''
-      document.body.style.cursor = ''
-
-      const delta = e.clientY - rowDrag.startY
-      const newH = Math.max(20, rowDrag.startHeight + delta)
-      const trEl = rowDrag.trEl
-      rowDrag = null
-
-      // Commit height to ProseMirror doc via ResizableTableRow so it persists
-      try {
-        const firstCell = trEl.cells[0]
-        if (firstCell) {
-          const pos = ed.view.posAtDOM(firstCell, 0)
-          const $pos = ed.state.doc.resolve(pos)
-          for (let d = $pos.depth; d >= 0; d--) {
-            const node = $pos.node(d)
-            if (node.type.name === 'tableRow') {
-              const rowPos = $pos.before(d)
-              ed.chain().command(({ tr: pmTr, dispatch }) => {
-                if (!dispatch) return false
-                pmTr.setNodeMarkup(rowPos, null, { ...node.attrs, height: newH + 'px' })
-                dispatch(pmTr)
-                return true
-              }).run()
-              break
-            }
-          }
-        }
-      } catch { /* ignore */ }
-
-      setCursor('')
-    }
-
-    dom.addEventListener('mousemove', onMouseMove)
-    dom.addEventListener('mouseleave', onMouseLeave)
-    dom.addEventListener('mousedown', onMouseDown)
-
-    return () => {
-      dom.removeEventListener('mousemove', onMouseMove)
-      dom.removeEventListener('mouseleave', onMouseLeave)
-      dom.removeEventListener('mousedown', onMouseDown)
-      document.removeEventListener('mousemove', onDocMove)
-      document.removeEventListener('mouseup', onDocUp)
-      rowDrag = null
-      document.body.style.userSelect = ''
-      document.body.style.cursor = ''
-    }
-  }, [editor, readOnly])
-
   // ─── Table address overlay ────────────────────────────────────────────────
   // Uses TipTap's own update events + RAF debounce — NO MutationObserver/ResizeObserver
   // to prevent infinite update loops.
@@ -559,15 +404,35 @@ export function RichTextEditor({
         const cols: ColOverlay[] = []
         const rowList: RowOverlay[] = []
 
-        const firstRowCells = rows[0].querySelectorAll('td, th')
-        Array.from(firstRowCells).slice(0, 16).forEach((cell, i) => {
-          const r = cell.getBoundingClientRect()
-          cols.push({
-            left: r.left - scrollRect.left + scroll.scrollLeft,
-            width: r.width,
-            label: colLabel(i),
+        // Build per-column positions by scanning ALL rows and accounting for
+        // colspan. Row 1 may have merged cells so its cell count < true column
+        // count; rows below fill in the gaps.
+        const colMap = new Map<number, { left: number; width: number }>()
+        Array.from(rows).forEach(row => {
+          let colIdx = 0
+          Array.from(row.querySelectorAll('td, th')).forEach(cell => {
+            const span = (cell as HTMLTableCellElement).colSpan || 1
+            if (!colMap.has(colIdx)) {
+              const r = cell.getBoundingClientRect()
+              const perW = r.width / span
+              for (let s = 0; s < span; s++) {
+                if (!colMap.has(colIdx + s)) {
+                  colMap.set(colIdx + s, {
+                    left: r.left - scrollRect.left + scroll.scrollLeft + s * perW,
+                    width: perW,
+                  })
+                }
+              }
+            }
+            colIdx += span
           })
         })
+        Array.from(colMap.entries())
+          .sort((a, b) => a[0] - b[0])
+          .slice(0, 16)
+          .forEach(([i, pos]) => {
+            cols.push({ ...pos, label: colLabel(i) })
+          })
 
         Array.from(rows).slice(0, 36).forEach((row, i) => {
           const r = row.getBoundingClientRect()
