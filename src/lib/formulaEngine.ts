@@ -58,19 +58,51 @@ export function evaluateFormula(
   try {
     const upper = expr.toUpperCase()
 
+    // Helper: collect numeric values from a range
+    const rangeValues = (a1: string, a2: string): number[] | null => {
+      const start = parseCellAddress(a1)
+      const end = parseCellAddress(a2)
+      if (!start || !end) return null
+      const vals: number[] = []
+      for (let r = Math.min(start.row, end.row); r <= Math.max(start.row, end.row); r++) {
+        for (let c = Math.min(start.col, end.col); c <= Math.max(start.col, end.col); c++) {
+          vals.push(resolveNum(getCellAddress(c, r)))
+        }
+      }
+      return vals
+    }
+
     // SUM(A1:A3)
     const sumMatch = upper.match(/^SUM\(([A-Z]+\d+):([A-Z]+\d+)\)$/)
     if (sumMatch) {
-      const start = parseCellAddress(sumMatch[1])
-      const end = parseCellAddress(sumMatch[2])
-      if (!start || !end) return '#ERR'
-      let sum = 0
-      for (let r = Math.min(start.row, end.row); r <= Math.max(start.row, end.row); r++) {
-        for (let c = Math.min(start.col, end.col); c <= Math.max(start.col, end.col); c++) {
-          sum += resolveNum(getCellAddress(c, r))
-        }
-      }
-      return String(sum)
+      const vals = rangeValues(sumMatch[1], sumMatch[2])
+      if (!vals) return '#ERR'
+      return String(vals.reduce((a, b) => a + b, 0))
+    }
+
+    // AVERAGE(A1:A3)
+    const avgMatch = upper.match(/^AVERAGE\(([A-Z]+\d+):([A-Z]+\d+)\)$/)
+    if (avgMatch) {
+      const vals = rangeValues(avgMatch[1], avgMatch[2])
+      if (!vals || vals.length === 0) return '#ERR'
+      const avg = vals.reduce((a, b) => a + b, 0) / vals.length
+      return Number.isInteger(avg) ? String(avg) : String(Math.round(avg * 1e10) / 1e10)
+    }
+
+    // MAX(A1:A3)
+    const maxMatch = upper.match(/^MAX\(([A-Z]+\d+):([A-Z]+\d+)\)$/)
+    if (maxMatch) {
+      const vals = rangeValues(maxMatch[1], maxMatch[2])
+      if (!vals || vals.length === 0) return '#ERR'
+      return String(Math.max(...vals))
+    }
+
+    // MIN(A1:A3)
+    const minMatch = upper.match(/^MIN\(([A-Z]+\d+):([A-Z]+\d+)\)$/)
+    if (minMatch) {
+      const vals = rangeValues(minMatch[1], minMatch[2])
+      if (!vals || vals.length === 0) return '#ERR'
+      return String(Math.min(...vals))
     }
 
     // Replace cell references with numeric values

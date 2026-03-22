@@ -163,6 +163,6 @@
   }
 
   .ProseMirror.resize-cursor {
-    cursor: col-resize !important;
+    cursor: col-resize;
   }
 }

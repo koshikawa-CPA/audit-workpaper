@@ -8,10 +8,10 @@ import TextAlign from '@tiptap/extension-text-align'
 import TextStyle from '@tiptap/extension-text-style'
 import Color from '@tiptap/extension-color'
 import Table from '@tiptap/extension-table'
-import TableRow from '@tiptap/extension-table-row'
 import TableHeader from '@tiptap/extension-table-header'
 import Placeholder from '@tiptap/extension-placeholder'
 import { FormulaTableCell } from './FormulaTableCell'
+import { ResizableTableRow } from './ResizableTableRow'
 import {
   evaluateFormula,
   formatCellValue,
@@ -40,6 +40,16 @@ function findParentTable(doc: any, pos: number) {
   return null
 }
 
+function colLabel(index: number): string {
+  let label = ''
+  let i = index + 1
+  while (i > 0) {
+    label = String.fromCharCode(65 + ((i - 1) % 26)) + label
+    i = Math.floor((i - 1) / 26)
+  }
+  return label
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface RichTextEditorProps {
@@ -57,6 +67,19 @@ interface CellContextMenu {
   currentFormat: CellFormat
 }
 
+interface ColOverlay { left: number; width: number; label: string }
+interface RowOverlay { top: number; height: number; label: string }
+interface TableOverlayItem {
+  top: number
+  left: number
+  cols: ColOverlay[]
+  rows: RowOverlay[]
+}
+
+const ROW_NUM_W = 28   // px width for row number column
+const COL_HDR_H = 20  // px height for column header row
+const BORDER_HIT = 6  // px proximity to detect resize zone
+
 // ─── Toolbar helpers ─────────────────────────────────────────────────────────
 
 function TBtn({
@@ -72,7 +95,6 @@ function TBtn({
   return (
     <button
       type="button"
-      // preventDefault on mousedown keeps editor focus so cursor position is preserved
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       disabled={disabled}
@@ -113,8 +135,10 @@ export function RichTextEditor({
   const [formulaBarValue, setFormulaBarValue] = useState('')
   const [cellAddress, setCellAddress] = useState('')
   const [cellContextMenu, setCellContextMenu] = useState<CellContextMenu | null>(null)
+  const [tableOverlays, setTableOverlays] = useState<TableOverlayItem[]>([])
   const currentCellPosRef = useRef<number>(-1)
   const isApplyingRef = useRef(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   // ─── Apply formula from bar ─────────────────────────────────────────────
 
@@ -170,7 +194,7 @@ export function RichTextEditor({
       TextStyle,
       Color,
       Table.configure({ resizable: true }),
-      TableRow,
+      ResizableTableRow,
       TableHeader,
       FormulaTableCell,
       Placeholder.configure({ placeholder }),
@@ -186,7 +210,6 @@ export function RichTextEditor({
       if (isApplyingRef.current) return
       const { $from } = e.state.selection
 
-      // Check if in table
       let inT = false
       let inTC = false
       let foundCellPos = -1
@@ -197,12 +220,11 @@ export function RichTextEditor({
         if (node.type.name === 'table') { inT = true }
         if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') {
           inTC = true
-          inT = true  // a cell is always inside a table
+          inT = true
           foundCellPos = $from.before(i)
           const formula = node.attrs.formula as string | null
           const text = node.textContent
 
-          // Find cell address
           const tableInfo = findParentTable(e.state.doc, foundCellPos)
           if (tableInfo) {
             foundAddr = getCellAddressInTable(tableInfo.node, node)
@@ -225,7 +247,8 @@ export function RichTextEditor({
     },
     editorProps: {
       attributes: {
-        class: 'prose prose-sm max-w-none focus:outline-none min-h-[400px] p-4',
+        // pt-10 (40px) and pl-10 (40px) give room for the address overlay headers
+        class: 'prose prose-sm max-w-none focus:outline-none min-h-[400px] pt-10 pr-4 pb-4 pl-10',
       },
       handleDOMEvents: {
         contextmenu: (view, event) => {
@@ -301,7 +324,6 @@ export function RichTextEditor({
     const cellNode = editor.state.doc.nodeAt(pos)
     if (!cellNode) return
 
-    // Re-apply formula with new format if applicable
     const formula = cellNode.attrs.formula as string | null
     let newText = cellNode.textContent
 
@@ -346,43 +368,216 @@ export function RichTextEditor({
     }
   }, [cellContextMenu])
 
-  // ─── Row/column resize cursor ────────────────────────────────────────────
+  // ─── Resize cursor + row height drag ─────────────────────────────────────
 
   useEffect(() => {
     if (!editor || readOnly) return
-    const dom = editor.view.dom as HTMLElement
-    const ROW_BORDER_PX = 6
+    const ed = editor
+    const dom = ed.view.dom as HTMLElement
+
+    // State for row drag
+    let rowDrag: {
+      startY: number
+      startHeight: number
+      trEl: HTMLTableRowElement
+    } | null = null
+
+    function setCursor(c: string) {
+      dom.style.cursor = c
+    }
 
     function onMouseMove(e: MouseEvent) {
+      if (rowDrag) return  // document handler manages cursor during drag
+
       const target = e.target as HTMLElement
-      const cell = target.closest('td, th') as HTMLElement | null
-      if (!cell) {
-        dom.style.cursor = ''
+
+      // Column resize handle hover
+      if (target.classList.contains('column-resize-handle') ||
+          target.closest('.column-resize-handle')) {
+        setCursor('col-resize')
         return
       }
+
+      const cell = target.closest('td, th') as HTMLElement | null
+      if (!cell) {
+        setCursor('')
+        return
+      }
+
       const rect = cell.getBoundingClientRect()
-      const nearBottom = e.clientY >= rect.bottom - ROW_BORDER_PX
-      const nearTop = e.clientY <= rect.top + ROW_BORDER_PX
+      const nearBottom = e.clientY >= rect.bottom - BORDER_HIT
+      const nearTop = e.clientY <= rect.top + BORDER_HIT
+      const nearRight = e.clientX >= rect.right - BORDER_HIT
 
       if (nearBottom || nearTop) {
-        dom.style.cursor = 'row-resize'
+        setCursor('row-resize')
+      } else if (nearRight) {
+        setCursor('col-resize')
       } else {
-        // Let TipTap's column-resize-handle handle col-resize via CSS class
-        dom.style.cursor = ''
+        setCursor('')
       }
     }
 
     function onMouseLeave() {
-      dom.style.cursor = ''
+      if (!rowDrag) setCursor('')
+    }
+
+    function onMouseDown(e: MouseEvent) {
+      const target = e.target as HTMLElement
+      // Don't capture clicks on column-resize-handle (TipTap manages those)
+      if (target.classList.contains('column-resize-handle') ||
+          target.closest('.column-resize-handle')) return
+
+      const cell = target.closest('td, th') as HTMLElement | null
+      if (!cell) return
+
+      const rect = cell.getBoundingClientRect()
+      const nearBottom = e.clientY >= rect.bottom - BORDER_HIT
+      const nearTop = e.clientY <= rect.top + BORDER_HIT
+      if (!nearBottom && !nearTop) return
+
+      e.preventDefault()
+      e.stopPropagation()
+
+      const tr = cell.closest('tr') as HTMLTableRowElement
+      if (!tr) return
+
+      rowDrag = {
+        startY: e.clientY,
+        startHeight: tr.getBoundingClientRect().height,
+        trEl: tr,
+      }
+      document.addEventListener('mousemove', onDocMove)
+      document.addEventListener('mouseup', onDocUp)
+    }
+
+    function onDocMove(e: MouseEvent) {
+      if (!rowDrag) return
+      document.body.style.cursor = 'row-resize'
+      const delta = e.clientY - rowDrag.startY
+      const newH = Math.max(20, rowDrag.startHeight + delta)
+      rowDrag.trEl.style.height = newH + 'px'
+      rowDrag.trEl.style.minHeight = newH + 'px'
+    }
+
+    function onDocUp(e: MouseEvent) {
+      if (!rowDrag) return
+      document.removeEventListener('mousemove', onDocMove)
+      document.removeEventListener('mouseup', onDocUp)
+      document.body.style.cursor = ''
+
+      const delta = e.clientY - rowDrag.startY
+      const newH = Math.max(20, rowDrag.startHeight + delta)
+      const trEl = rowDrag.trEl
+      rowDrag = null
+
+      // Persist height into ProseMirror doc via ResizableTableRow attribute
+      try {
+        const firstCell = trEl.querySelector('td, th')
+        if (firstCell) {
+          const pos = ed.view.posAtDOM(firstCell, 0)
+          const $pos = ed.state.doc.resolve(pos)
+          for (let d = $pos.depth; d >= 0; d--) {
+            const node = $pos.node(d)
+            if (node.type.name === 'tableRow') {
+              const rowPos = $pos.before(d)
+              ed.chain().command(({ tr, dispatch }) => {
+                if (!dispatch) return false
+                tr.setNodeMarkup(rowPos, null, { ...node.attrs, height: newH + 'px' })
+                dispatch(tr)
+                return true
+              }).run()
+              break
+            }
+          }
+        }
+      } catch { /* ignore */ }
+
+      setCursor('')
     }
 
     dom.addEventListener('mousemove', onMouseMove)
     dom.addEventListener('mouseleave', onMouseLeave)
+    dom.addEventListener('mousedown', onMouseDown)
+
     return () => {
       dom.removeEventListener('mousemove', onMouseMove)
       dom.removeEventListener('mouseleave', onMouseLeave)
+      dom.removeEventListener('mousedown', onMouseDown)
+      document.removeEventListener('mousemove', onDocMove)
+      document.removeEventListener('mouseup', onDocUp)
     }
   }, [editor, readOnly])
+
+  // ─── Table address overlay ────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!editor) return
+    const scroll = scrollRef.current
+    if (!scroll) return
+
+    function computeOverlays() {
+      if (!scroll) return
+      const scrollRect = scroll.getBoundingClientRect()
+      const tables = scroll.querySelectorAll('.ProseMirror table')
+      const result: TableOverlayItem[] = []
+
+      tables.forEach(table => {
+        const rows = table.querySelectorAll('tr')
+        if (rows.length === 0) return
+
+        const cols: ColOverlay[] = []
+        const rowList: RowOverlay[] = []
+
+        // Column headers from first row cells
+        const firstRowCells = rows[0].querySelectorAll('td, th')
+        Array.from(firstRowCells).slice(0, 16).forEach((cell, i) => {
+          const r = cell.getBoundingClientRect()
+          cols.push({
+            left: r.left - scrollRect.left + scroll.scrollLeft,
+            width: r.width,
+            label: colLabel(i),
+          })
+        })
+
+        // Row heights
+        Array.from(rows).slice(0, 36).forEach((row, i) => {
+          const r = row.getBoundingClientRect()
+          rowList.push({
+            top: r.top - scrollRect.top + scroll.scrollTop,
+            height: r.height,
+            label: String(i + 1),
+          })
+        })
+
+        const tRect = table.getBoundingClientRect()
+        result.push({
+          top: tRect.top - scrollRect.top + scroll.scrollTop,
+          left: tRect.left - scrollRect.left + scroll.scrollLeft,
+          cols,
+          rows: rowList,
+        })
+      })
+
+      setTableOverlays(result)
+    }
+
+    const mo = new MutationObserver(computeOverlays)
+    mo.observe(editor.view.dom, { childList: true, subtree: true, attributes: true })
+
+    const ro = new ResizeObserver(computeOverlays)
+    ro.observe(editor.view.dom)
+
+    scroll.addEventListener('scroll', computeOverlays)
+
+    computeOverlays()
+
+    return () => {
+      mo.disconnect()
+      ro.disconnect()
+      scroll.removeEventListener('scroll', computeOverlays)
+    }
+  }, [editor])
 
   if (!editor) return null
 
@@ -394,7 +589,6 @@ export function RichTextEditor({
       {/* ── Main toolbar ── */}
       {!readOnly && (
         <div className="flex flex-wrap items-center gap-0.5 px-2 py-1.5 border-b border-gray-200 bg-gray-50 shrink-0">
-          {/* Undo/Redo */}
           <TBtn onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()} title="元に戻す">
             <Undo className="h-3.5 w-3.5" />
           </TBtn>
@@ -404,7 +598,6 @@ export function RichTextEditor({
 
           <TDivider />
 
-          {/* Headings */}
           <TBtn onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} active={editor.isActive('heading', { level: 1 })} title="見出し1">
             <Heading1 className="h-3.5 w-3.5" />
           </TBtn>
@@ -417,7 +610,6 @@ export function RichTextEditor({
 
           <TDivider />
 
-          {/* Text formatting */}
           <TBtn onClick={() => editor.chain().focus().toggleBold().run()} active={editor.isActive('bold')} title="太字">
             <Bold className="h-3.5 w-3.5" />
           </TBtn>
@@ -436,7 +628,6 @@ export function RichTextEditor({
 
           <TDivider />
 
-          {/* Lists */}
           <TBtn onClick={() => editor.chain().focus().toggleBulletList().run()} active={editor.isActive('bulletList')} title="箇条書き">
             <List className="h-3.5 w-3.5" />
           </TBtn>
@@ -449,7 +640,6 @@ export function RichTextEditor({
 
           <TDivider />
 
-          {/* Alignment */}
           <TBtn onClick={() => editor.chain().focus().setTextAlign('left').run()} active={editor.isActive({ textAlign: 'left' })} title="左寄せ">
             <AlignLeft className="h-3.5 w-3.5" />
           </TBtn>
@@ -462,7 +652,6 @@ export function RichTextEditor({
 
           <TDivider />
 
-          {/* Insert table */}
           <TBtn
             onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 4, withHeaderRow: true }).run()}
             active={editor.isActive('table')}
@@ -474,7 +663,6 @@ export function RichTextEditor({
             <Minus className="h-3.5 w-3.5" />
           </TBtn>
 
-          {/* Save */}
           {onSave && (
             <>
               <TDivider />
@@ -497,12 +685,11 @@ export function RichTextEditor({
         </div>
       )}
 
-      {/* ── Table toolbar (fixed below main toolbar, shown when in table) ── */}
+      {/* ── Table toolbar ── */}
       {!readOnly && inTable && (
         <div className="flex flex-wrap items-center gap-0.5 px-2 py-1 border-b border-gray-200 bg-blue-50 shrink-0">
           <span className="text-xs text-blue-500 font-medium mr-1 shrink-0">表:</span>
 
-          {/* Column operations */}
           <TBtn onClick={() => editor.chain().focus().addColumnBefore().run()} title="左に列を追加">
             <span className="flex items-center gap-0.5 text-xs"><ChevronLeft className="h-3 w-3" />列</span>
           </TBtn>
@@ -515,7 +702,6 @@ export function RichTextEditor({
 
           <TDivider />
 
-          {/* Row operations */}
           <TBtn onClick={() => editor.chain().focus().addRowBefore().run()} title="上に行を追加">
             <span className="flex items-center gap-0.5 text-xs"><ChevronUp className="h-3 w-3" />行</span>
           </TBtn>
@@ -528,7 +714,6 @@ export function RichTextEditor({
 
           <TDivider />
 
-          {/* Merge/Split */}
           <TBtn onClick={() => editor.chain().focus().mergeCells().run()} title="セルを結合">
             <span className="flex items-center gap-0.5 text-xs"><Merge className="h-3 w-3" />結合</span>
           </TBtn>
@@ -538,14 +723,13 @@ export function RichTextEditor({
 
           <TDivider />
 
-          {/* Delete table */}
           <TBtn onClick={() => editor.chain().focus().deleteTable().run()} title="表を削除" danger>
             <span className="flex items-center gap-0.5 text-xs"><Trash2 className="h-3 w-3" />表削除</span>
           </TBtn>
         </div>
       )}
 
-      {/* ── Formula bar (shown when in table cell) ── */}
+      {/* ── Formula bar ── */}
       {!readOnly && inTableCell && (
         <div className="flex items-center gap-2 px-3 py-1 border-b border-gray-200 bg-amber-50 shrink-0">
           <span className="text-xs font-mono text-amber-700 font-bold shrink-0 w-8 text-center">{cellAddress || '—'}</span>
@@ -555,7 +739,7 @@ export function RichTextEditor({
             value={formulaBarValue}
             onChange={e => setFormulaBarValue(e.target.value)}
             onKeyDown={handleFormulaBarKeyDown}
-            placeholder="値または数式（=A1+B2、=SUM(A1:A3)）を入力してEnter"
+            placeholder="値または数式（=A1+B2、=SUM(A1:A3)、=AVERAGE(A1:A3)）を入力してEnter"
             className="flex-1 text-sm font-mono border-0 outline-none bg-transparent text-gray-800 placeholder:text-gray-400"
           />
           <button
@@ -568,8 +752,90 @@ export function RichTextEditor({
         </div>
       )}
 
-      {/* ── Editor content ── */}
-      <div className="flex-1 overflow-auto">
+      {/* ── Editor scroll area with address overlay ── */}
+      <div className="flex-1 overflow-auto relative" ref={scrollRef}>
+
+        {/* Address overlay: column headers + row numbers */}
+        {tableOverlays.length > 0 && (
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{ zIndex: 5 }}
+          >
+            {tableOverlays.map((overlay, ti) => (
+              <div key={ti}>
+                {/* Column header row */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: overlay.top - COL_HDR_H,
+                    left: overlay.left - ROW_NUM_W,
+                    display: 'flex',
+                    height: COL_HDR_H,
+                  }}
+                >
+                  {/* Corner cell */}
+                  <div style={{
+                    width: ROW_NUM_W,
+                    flexShrink: 0,
+                    background: '#e5e7eb',
+                    border: '1px solid #d1d5db',
+                    borderRight: 'none',
+                  }} />
+                  {overlay.cols.map((col, ci) => (
+                    <div
+                      key={ci}
+                      style={{
+                        width: col.width,
+                        flexShrink: 0,
+                        background: '#f3f4f6',
+                        border: '1px solid #d1d5db',
+                        borderLeft: ci === 0 ? '1px solid #d1d5db' : 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: '#374151',
+                        userSelect: 'none',
+                        fontFamily: 'monospace',
+                      }}
+                    >
+                      {col.label}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Row number cells */}
+                {overlay.rows.map((row, ri) => (
+                  <div
+                    key={ri}
+                    style={{
+                      position: 'absolute',
+                      top: row.top,
+                      left: overlay.left - ROW_NUM_W,
+                      width: ROW_NUM_W,
+                      height: row.height,
+                      background: '#f3f4f6',
+                      border: '1px solid #d1d5db',
+                      borderTop: ri === 0 ? '1px solid #d1d5db' : 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: '#374151',
+                      userSelect: 'none',
+                      fontFamily: 'monospace',
+                    }}
+                  >
+                    {row.label}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+
         <EditorContent editor={editor} />
       </div>
 
