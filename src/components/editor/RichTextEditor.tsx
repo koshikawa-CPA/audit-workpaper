@@ -139,20 +139,23 @@ export function RichTextEditor({
   const currentCellPosRef = useRef<number>(-1)
   const isApplyingRef = useRef(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  // Always-current editor ref — avoids stale closure in callbacks
+  const editorRef = useRef<ReturnType<typeof useEditor>>(null)
 
   // ─── Apply formula from bar ─────────────────────────────────────────────
 
   const applyFormulaBar = useCallback((value: string) => {
-    if (!editor || currentCellPosRef.current < 0) return
+    const ed = editorRef.current
+    if (!ed || currentCellPosRef.current < 0) return
     const pos = currentCellPosRef.current
-    const cellNode = editor.state.doc.nodeAt(pos)
+    const cellNode = ed.state.doc.nodeAt(pos)
     if (!cellNode) return
 
     const isFormula = value.startsWith('=')
     let displayText = value
 
     if (isFormula) {
-      const tableInfo = findParentTable(editor.state.doc, pos)
+      const tableInfo = findParentTable(ed.state.doc, pos)
       if (tableInfo) {
         const cellValues = extractTableCellValues(tableInfo.node)
         const cellAddr = getCellAddressInTable(tableInfo.node, cellNode)
@@ -162,7 +165,7 @@ export function RichTextEditor({
     }
 
     isApplyingRef.current = true
-    const schema = editor.schema
+    const schema = ed.schema
     const textContent = displayText ? schema.text(displayText) : undefined
     const para = schema.nodes.paragraph.create(null, textContent ? [textContent] : [])
     const newCell = cellNode.type.create(
@@ -170,7 +173,7 @@ export function RichTextEditor({
       para,
     )
 
-    editor
+    ed
       .chain()
       .command(({ tr, dispatch }) => {
         if (!dispatch) return false
@@ -182,7 +185,7 @@ export function RichTextEditor({
       .run()
 
     isApplyingRef.current = false
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   // ─── Editor setup ────────────────────────────────────────────────────────
 
@@ -273,6 +276,10 @@ export function RichTextEditor({
       },
     },
   })
+
+  // ─── Keep editorRef current ──────────────────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ;(editorRef as any).current = editor
 
   // ─── Content sync ────────────────────────────────────────────────────────
 
@@ -506,15 +513,30 @@ export function RichTextEditor({
       dom.removeEventListener('mousedown', onMouseDown)
       document.removeEventListener('mousemove', onDocMove)
       document.removeEventListener('mouseup', onDocUp)
+      // Reset drag state so a re-mount doesn't leave stale document listeners
+      rowDrag = null
+      document.body.style.cursor = ''
     }
   }, [editor, readOnly])
 
   // ─── Table address overlay ────────────────────────────────────────────────
+  // Uses TipTap's own update events + RAF debounce — NO MutationObserver/ResizeObserver
+  // to prevent infinite update loops.
 
   useEffect(() => {
     if (!editor) return
     const scroll = scrollRef.current
     if (!scroll) return
+
+    let rafId: number | null = null
+
+    function scheduleCompute() {
+      if (rafId !== null) return  // already queued, skip
+      rafId = requestAnimationFrame(() => {
+        rafId = null
+        computeOverlays()
+      })
+    }
 
     function computeOverlays() {
       if (!scroll) return
@@ -529,7 +551,6 @@ export function RichTextEditor({
         const cols: ColOverlay[] = []
         const rowList: RowOverlay[] = []
 
-        // Column headers from first row cells
         const firstRowCells = rows[0].querySelectorAll('td, th')
         Array.from(firstRowCells).slice(0, 16).forEach((cell, i) => {
           const r = cell.getBoundingClientRect()
@@ -540,7 +561,6 @@ export function RichTextEditor({
           })
         })
 
-        // Row heights
         Array.from(rows).slice(0, 36).forEach((row, i) => {
           const r = row.getBoundingClientRect()
           rowList.push({
@@ -562,20 +582,21 @@ export function RichTextEditor({
       setTableOverlays(result)
     }
 
-    const mo = new MutationObserver(computeOverlays)
-    mo.observe(editor.view.dom, { childList: true, subtree: true, attributes: true })
+    // Trigger on content changes (structural: row/col add/delete)
+    editor.on('update', scheduleCompute)
+    // Trigger on scroll
+    scroll.addEventListener('scroll', scheduleCompute, { passive: true })
+    // Trigger on window resize (column widths can change)
+    window.addEventListener('resize', scheduleCompute)
 
-    const ro = new ResizeObserver(computeOverlays)
-    ro.observe(editor.view.dom)
-
-    scroll.addEventListener('scroll', computeOverlays)
-
-    computeOverlays()
+    // Initial computation
+    scheduleCompute()
 
     return () => {
-      mo.disconnect()
-      ro.disconnect()
-      scroll.removeEventListener('scroll', computeOverlays)
+      editor.off('update', scheduleCompute)
+      scroll.removeEventListener('scroll', scheduleCompute)
+      window.removeEventListener('resize', scheduleCompute)
+      if (rafId !== null) cancelAnimationFrame(rafId)
     }
   }, [editor])
 
