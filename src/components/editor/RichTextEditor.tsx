@@ -72,6 +72,8 @@ function TBtn({
   return (
     <button
       type="button"
+      // preventDefault on mousedown keeps editor focus so cursor position is preserved
+      onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       disabled={disabled}
       title={title}
@@ -195,6 +197,7 @@ export function RichTextEditor({
         if (node.type.name === 'table') { inT = true }
         if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') {
           inTC = true
+          inT = true  // a cell is always inside a table
           foundCellPos = $from.before(i)
           const formula = node.attrs.formula as string | null
           const text = node.textContent
@@ -342,6 +345,44 @@ export function RichTextEditor({
       return () => window.removeEventListener('click', handler)
     }
   }, [cellContextMenu])
+
+  // ─── Row/column resize cursor ────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!editor || readOnly) return
+    const dom = editor.view.dom as HTMLElement
+    const ROW_BORDER_PX = 6
+
+    function onMouseMove(e: MouseEvent) {
+      const target = e.target as HTMLElement
+      const cell = target.closest('td, th') as HTMLElement | null
+      if (!cell) {
+        dom.style.cursor = ''
+        return
+      }
+      const rect = cell.getBoundingClientRect()
+      const nearBottom = e.clientY >= rect.bottom - ROW_BORDER_PX
+      const nearTop = e.clientY <= rect.top + ROW_BORDER_PX
+
+      if (nearBottom || nearTop) {
+        dom.style.cursor = 'row-resize'
+      } else {
+        // Let TipTap's column-resize-handle handle col-resize via CSS class
+        dom.style.cursor = ''
+      }
+    }
+
+    function onMouseLeave() {
+      dom.style.cursor = ''
+    }
+
+    dom.addEventListener('mousemove', onMouseMove)
+    dom.addEventListener('mouseleave', onMouseLeave)
+    return () => {
+      dom.removeEventListener('mousemove', onMouseMove)
+      dom.removeEventListener('mouseleave', onMouseLeave)
+    }
+  }, [editor, readOnly])
 
   if (!editor) return null
 
