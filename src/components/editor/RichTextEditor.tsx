@@ -151,6 +151,8 @@ export function RichTextEditor({
   const [cellContextMenu, setCellContextMenu] = useState<CellContextMenu | null>(null)
   const [tableOverlays, setTableOverlays] = useState<TableOverlayItem[]>([])
   const [uploading, setUploading] = useState(false)
+  // pos of the cell the user just left → triggers auto comma-format
+  const [autoFormatTrigger, setAutoFormatTrigger] = useState<{ pos: number } | null>(null)
   const currentCellPosRef = useRef<number>(-1)
   const isApplyingRef = useRef(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -355,6 +357,13 @@ export function RichTextEditor({
 
       setInTable(inT)
       setInTableCell(inTC)
+
+      // Trigger auto comma-format for the cell the user just left
+      const oldCellPos = currentCellPosRef.current
+      if (foundCellPos !== oldCellPos && oldCellPos >= 0) {
+        setAutoFormatTrigger({ pos: oldCellPos })
+      }
+
       currentCellPosRef.current = foundCellPos
       setCellAddress(foundAddr)
 
@@ -426,6 +435,42 @@ export function RichTextEditor({
     const interval = setInterval(handleSave, 30000)
     return () => clearInterval(interval)
   }, [handleSave, onSave, readOnly])
+
+  // ─── Auto comma-format: apply when user leaves a table cell ──────────────
+
+  useEffect(() => {
+    if (!autoFormatTrigger || !editor) return
+    const { pos } = autoFormatTrigger
+    const cell = editor.state.doc.nodeAt(pos)
+    // Only format plain-number cells (no formula, no mixed text)
+    if (!cell || (cell.attrs.formula as string | null)) return
+    const text = cell.textContent.trim()
+    // Strip existing commas, check if it's a pure integer or decimal
+    const rawNum = text.replace(/,/g, '')
+    if (!/^-?\d+(\.\d+)?$/.test(rawNum) || rawNum === '') return
+    const num = parseFloat(rawNum)
+    if (isNaN(num)) return
+    const formatted = num.toLocaleString('ja-JP')
+    if (formatted === text) return  // already formatted, nothing to do
+
+    isApplyingRef.current = true
+    const schema = editor.schema
+    const para = schema.nodes.paragraph.create(
+      null,
+      formatted ? [schema.text(formatted)] : []
+    )
+    const newCell = cell.type.create(cell.attrs, para)
+    editor
+      .chain()
+      .command(({ tr, dispatch }) => {
+        if (!dispatch) return false
+        tr.replaceWith(pos, pos + cell.nodeSize, newCell)
+        dispatch(tr)
+        return true
+      })
+      .run()
+    isApplyingRef.current = false
+  }, [autoFormatTrigger, editor])
 
   // ─── Formula bar Enter handler ───────────────────────────────────────────
 

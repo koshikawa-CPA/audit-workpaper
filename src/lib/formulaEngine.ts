@@ -48,10 +48,12 @@ export function evaluateFormula(
       const childVisited = new Set(Array.from(visited).concat(currentAddr.toUpperCase()))
       const result = evaluateFormula(raw, rawValues, childVisited, key)
       if (result === '#CIRC' || result === '#ERR') throw new Error(result.slice(1))
-      const n = parseFloat(result)
+      // Strip thousand-separator commas before parsing (e.g. "7,000,000" → 7000000)
+      const n = parseFloat(result.replace(/,/g, ''))
       return isNaN(n) ? 0 : n
     }
-    const n = parseFloat(raw)
+    // Strip thousand-separator commas before parsing (e.g. "7,000,000" → 7000000)
+    const n = parseFloat(raw.replace(/,/g, ''))
     return isNaN(n) ? 0 : n
   }
 
