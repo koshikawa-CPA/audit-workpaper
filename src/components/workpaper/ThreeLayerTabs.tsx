@@ -495,6 +495,7 @@ export function ThreeLayerTabs({ project, profile }: ThreeLayerTabsProps) {
                     onSave={handleSave}
                     readOnly={project.status === 'locked' || !canEdit}
                     placeholder="調書の内容を入力してください..."
+                    workpaperId={workpaper.id}
                   />
                 </div>
               </div>

@@ -12,6 +12,8 @@ import TableRow from '@tiptap/extension-table-row'
 import TableHeader from '@tiptap/extension-table-header'
 import Placeholder from '@tiptap/extension-placeholder'
 import { FormulaTableCell } from './FormulaTableCell'
+import { FileAttachmentNode } from './FileAttachmentNode'
+import { createClient } from '@/lib/supabase/client'
 import {
   evaluateFormula,
   formatCellValue,
@@ -24,7 +26,7 @@ import {
   AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3,
   Table as TableIcon, Undo, Redo, Minus, Code, Quote, Save, Loader2,
   ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
-  Merge, Scissors, Trash2, Calculator,
+  Merge, Scissors, Trash2, Calculator, Paperclip,
 } from 'lucide-react'
 
 // ─── Document helpers ────────────────────────────────────────────────────────
@@ -58,7 +60,18 @@ interface RichTextEditorProps {
   onSave?: (content: Record<string, unknown>) => Promise<void>
   readOnly?: boolean
   placeholder?: string
+  workpaperId?: string  // for registering uploads in workpaper_files
 }
+
+const ACCEPTED_MIME = [
+  'application/pdf',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'image/png',
+  'image/jpeg',
+]
 
 interface CellContextMenu {
   x: number
@@ -126,6 +139,7 @@ export function RichTextEditor({
   onSave,
   readOnly = false,
   placeholder = '内容を入力してください...',
+  workpaperId,
 }: RichTextEditorProps) {
   const [saving, setSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
@@ -135,11 +149,85 @@ export function RichTextEditor({
   const [cellAddress, setCellAddress] = useState('')
   const [cellContextMenu, setCellContextMenu] = useState<CellContextMenu | null>(null)
   const [tableOverlays, setTableOverlays] = useState<TableOverlayItem[]>([])
+  const [uploading, setUploading] = useState(false)
   const currentCellPosRef = useRef<number>(-1)
   const isApplyingRef = useRef(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   // Always-current editor ref — avoids stale closure in callbacks
   const editorRef = useRef<ReturnType<typeof useEditor>>(null)
+
+  // ─── File upload + insert ─────────────────────────────────────────────────
+
+  const uploadFile = useCallback(async (file: File) => {
+    if (!ACCEPTED_MIME.includes(file.type)) {
+      alert(`対応していないファイル形式です。\n対応形式: PDF、Excel、Word、PNG、JPEG`)
+      return
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      alert('ファイルサイズは50MB以下にしてください。')
+      return
+    }
+
+    const ed = editorRef.current
+    if (!ed) return
+
+    setUploading(true)
+    try {
+      const supabase = createClient()
+
+      // Get current user for path namespace
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('ログインが必要です')
+
+      // Upload to Storage: {userId}/{timestamp}_{filename}
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const filePath = `${user.id}/${Date.now()}_${safeName}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('workpaper-attachments')
+        .upload(filePath, file, { contentType: file.type, upsert: false })
+
+      if (uploadError) throw uploadError
+
+      // Register in workpaper_files if workpaperId is available
+      let fileId: string | null = null
+      if (workpaperId) {
+        const res = await fetch(`/api/workpapers/${workpaperId}/files`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filename: file.name,
+            file_path: filePath,
+            file_size: file.size,
+            mime_type: file.type,
+          }),
+        })
+        if (res.ok) {
+          const row = await res.json()
+          fileId = row.id ?? null
+        }
+      }
+
+      // Insert FileAttachment node at current cursor position
+      ed.chain().focus().insertContent({
+        type: 'fileAttachment',
+        attrs: {
+          fileId,
+          filePath,
+          filename: file.name,
+          mimeType: file.type,
+          fileSize: file.size,
+        },
+      }).run()
+
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      alert(`アップロードに失敗しました: ${msg}`)
+    } finally {
+      setUploading(false)
+    }
+  }, [workpaperId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Apply formula from bar ─────────────────────────────────────────────
 
@@ -199,6 +287,7 @@ export function RichTextEditor({
       TableRow,
       TableHeader,
       FormulaTableCell,
+      FileAttachmentNode,
       Placeholder.configure({ placeholder }),
     ],
     content: content || '',
@@ -373,6 +462,39 @@ export function RichTextEditor({
       return () => window.removeEventListener('click', handler)
     }
   }, [cellContextMenu])
+
+  // ─── Drag & drop file attachment ─────────────────────────────────────────
+
+  useEffect(() => {
+    if (readOnly) return
+    const scroll = scrollRef.current
+    if (!scroll) return
+
+    function onDragOver(e: DragEvent) {
+      if (!e.dataTransfer?.types.includes('Files')) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+      scroll!.classList.add('ring-2', 'ring-blue-400', 'ring-inset')
+    }
+    function onDragLeave() {
+      scroll!.classList.remove('ring-2', 'ring-blue-400', 'ring-inset')
+    }
+    function onDrop(e: DragEvent) {
+      scroll!.classList.remove('ring-2', 'ring-blue-400', 'ring-inset')
+      if (!e.dataTransfer?.files.length) return
+      e.preventDefault()
+      Array.from(e.dataTransfer.files).forEach(uploadFile)
+    }
+
+    scroll.addEventListener('dragover', onDragOver)
+    scroll.addEventListener('dragleave', onDragLeave)
+    scroll.addEventListener('drop', onDrop)
+    return () => {
+      scroll.removeEventListener('dragover', onDragOver)
+      scroll.removeEventListener('dragleave', onDragLeave)
+      scroll.removeEventListener('drop', onDrop)
+    }
+  }, [readOnly, uploadFile])
 
   // ─── Table address overlay ────────────────────────────────────────────────
   // Uses TipTap's own update events + RAF debounce — NO MutationObserver/ResizeObserver
@@ -558,6 +680,35 @@ export function RichTextEditor({
           <TBtn onClick={() => editor.chain().focus().setHorizontalRule().run()} title="水平線">
             <Minus className="h-3.5 w-3.5" />
           </TBtn>
+
+          <TDivider />
+
+          {/* File attachment */}
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            title="ファイルを添付（PDF、Excel、Word、画像）"
+            className="flex items-center gap-1 px-2 py-1 rounded text-xs text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-40"
+          >
+            {uploading
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : <Paperclip className="h-3.5 w-3.5" />
+            }
+            添付
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            accept=".pdf,.xlsx,.xls,.docx,.doc,.png,.jpg,.jpeg"
+            multiple
+            onChange={e => {
+              Array.from(e.target.files ?? []).forEach(uploadFile)
+              e.target.value = ''  // reset so same file can be re-selected
+            }}
+          />
 
           {onSave && (
             <>
