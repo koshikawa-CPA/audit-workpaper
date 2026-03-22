@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Plus, Loader2, FileText } from 'lucide-react'
+import { Plus, Loader2, FileText, RotateCcw } from 'lucide-react'
 import { RichTextEditor } from '@/components/editor/RichTextEditor'
 import type { TabConfig, TabItem, AuditProject, Profile, Workpaper } from '@/types'
-import { STATUS_LABELS, STATUS_COLORS } from '@/types'
+import { STATUS_LABELS } from '@/types'
 import Link from 'next/link'
 
 interface ThreeLayerTabsProps {
@@ -48,7 +48,23 @@ export function ThreeLayerTabs({ project, profile }: ThreeLayerTabsProps) {
   const renameInputRef = useRef<HTMLInputElement>(null)
   const canEdit = profile.role === 'creator' || profile.role === 'admin'
 
-  // Load tab config
+  // Load tab config and apply first selection
+  function applyConfig(config: TabConfig) {
+    setTabConfig(config)
+    if (config.layer1.length > 0) {
+      const l1 = config.layer1[0]
+      setSelectedL1(l1.id)
+      const l2tabs = config.layer2[l1.id] ?? []
+      if (l2tabs.length > 0) {
+        const l2 = l2tabs[0]
+        setSelectedL2(l2.id)
+        const l3tabs = config.layer3[`${l1.id}__${l2.id}`] ?? []
+        if (l3tabs.length > 0) setSelectedL3(l3tabs[0].id)
+        else setSelectedL3('')
+      } else { setSelectedL2(''); setSelectedL3('') }
+    }
+  }
+
   useEffect(() => {
     async function load() {
       setLoadingConfig(true)
@@ -56,24 +72,28 @@ export function ThreeLayerTabs({ project, profile }: ThreeLayerTabsProps) {
         const res = await fetch(`/api/projects/${project.id}/tab-config`)
         if (res.ok) {
           const config: TabConfig = await res.json()
-          setTabConfig(config)
-          if (config.layer1.length > 0) {
-            const l1 = config.layer1[0]
-            setSelectedL1(l1.id)
-            const l2tabs = config.layer2[l1.id] ?? []
-            if (l2tabs.length > 0) {
-              const l2 = l2tabs[0]
-              setSelectedL2(l2.id)
-              const l3tabs = config.layer3[`${l1.id}__${l2.id}`] ?? []
-              if (l3tabs.length > 0) setSelectedL3(l3tabs[0].id)
-            }
-          }
+          applyConfig(config)
         }
       } finally {
         setLoadingConfig(false)
       }
     }
     load()
+  }, [project.id])
+
+  // Reset tab config to new defaults
+  const resetConfig = useCallback(async () => {
+    if (!confirm('タブ設定をデフォルトにリセットしますか？\n※ タブ構成のみリセットされます。調書の内容は消えません。')) return
+    setLoadingConfig(true)
+    try {
+      const res = await fetch(`/api/projects/${project.id}/tab-config`, { method: 'DELETE' })
+      if (res.ok) {
+        const config: TabConfig = await res.json()
+        applyConfig(config)
+      }
+    } finally {
+      setLoadingConfig(false)
+    }
   }, [project.id])
 
   // Save tab config to API (debounced)
@@ -337,6 +357,17 @@ export function ThreeLayerTabs({ project, profile }: ThreeLayerTabsProps) {
             ) : tab.title}
           </button>
         ))}
+        {/* Reset button — shown to creators/admins, right side of L1 tab bar */}
+        {canEdit && (
+          <button
+            onClick={resetConfig}
+            title="タブ設定をデフォルトにリセット"
+            className="ml-auto mb-0 self-center mr-2 flex items-center gap-1 px-2 py-1 text-xs text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors whitespace-nowrap shrink-0"
+          >
+            <RotateCcw className="h-3 w-3" />
+            リセット
+          </button>
+        )}
       </div>
 
       {/* ── Main area: Layer 2 (left) + right panel ── */}
