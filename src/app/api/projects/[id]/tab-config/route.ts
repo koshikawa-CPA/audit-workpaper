@@ -2,25 +2,61 @@ import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import type { TabConfig, TabItem } from '@/types'
 
+// L2 default tabs per L1 tab (index matches L1 order)
+const L1_L2_DEFAULTS: Array<{ title: string; l2Titles: string[] }> = [
+  {
+    title: '契約',
+    l2Titles: ['クライアント概要', '契約審査', '契約書管理', 'その他'],
+  },
+  {
+    title: '計画',
+    l2Titles: Array.from({ length: 12 }, (_, i) => `様式${i + 1}`),
+  },
+  {
+    title: '内部統制',
+    l2Titles: [
+      '全社的統制', '決算財務報告', 'ITGC', '情報処理統制',
+      '業務処理売上高', '業務処理棚卸資産', '業務処理売掛金', 'その他',
+    ],
+  },
+  {
+    title: '中間監査',
+    l2Titles: [
+      '現金預金', '売掛金', '棚卸資産', '有形固定資産', '投資有価証券',
+      '買掛金', '借入金', '未払金', '引当金', '資本金', '売上', '売上原価', '販管費',
+    ],
+  },
+  {
+    title: '期末監査',
+    l2Titles: [
+      '現金預金', '売掛金', '棚卸資産', '有形固定資産', '投資有価証券',
+      '買掛金', '借入金', '未払金', '引当金', '資本金', '売上', '売上原価', '販管費',
+    ],
+  },
+  {
+    title: '審査',
+    l2Titles: [
+      '契約審査', '計画審査', '中間意見審査', '中間表示審査', '期末意見審査', '期末表示審査',
+    ],
+  },
+]
+
+const DEFAULT_L3_TITLES = ['A', 'A10', 'A11', 'A20', 'A30']
+
 function createDefaultConfig(): TabConfig {
   const genId = () => crypto.randomUUID()
 
-  const l1Titles = ['契約', '計画', '内部統制', '中間監査', '期末監査', 'その他']
-  const l2Titles = [
-    '現金預金', '売掛金', '棚卸資産', '有形固定資産', '投資有価証券',
-    '買掛金', '借入金', '未払金', '引当金', '資本金', '売上', '売上原価', '販管費',
-  ]
-  const l3Titles = ['A', 'A10', 'A11', 'A20', 'A30']
-
-  const layer1: TabItem[] = l1Titles.map(title => ({ id: genId(), title }))
+  const layer1: TabItem[] = L1_L2_DEFAULTS.map(({ title }) => ({ id: genId(), title }))
   const layer2: Record<string, TabItem[]> = {}
   const layer3: Record<string, TabItem[]> = {}
 
-  for (const l1 of layer1) {
+  for (let i = 0; i < layer1.length; i++) {
+    const l1 = layer1[i]
+    const l2Titles = L1_L2_DEFAULTS[i].l2Titles
     const l2tabs: TabItem[] = l2Titles.map(title => ({ id: genId(), title }))
     layer2[l1.id] = l2tabs
     for (const l2 of l2tabs) {
-      layer3[`${l1.id}__${l2.id}`] = l3Titles.map(title => ({ id: genId(), title }))
+      layer3[`${l1.id}__${l2.id}`] = DEFAULT_L3_TITLES.map(title => ({ id: genId(), title }))
     }
   }
 

@@ -93,6 +93,7 @@
     text-align: left;
     font-weight: 600;
     font-size: 0.875rem;
+    position: relative;
   }
 
   .ProseMirror td,
@@ -101,11 +102,68 @@
     padding: 6px 12px;
     font-size: 0.875rem;
     min-width: 40px;
+    position: relative;
   }
 
   .ProseMirror tr,
   .prose tr {
     border: 1px solid #d1d5db !important;
+  }
+
+  /* Formula cell indicator */
+  .ProseMirror td[data-formula]::before,
+  .ProseMirror th[data-formula]::before {
+    content: 'fx';
+    position: absolute;
+    top: 2px;
+    right: 3px;
+    font-size: 0.6rem;
+    color: #f59e0b;
+    opacity: 0.7;
+    font-style: italic;
+    pointer-events: none;
+  }
+
+  /* Currency format */
+  .ProseMirror td[data-cell-format="currency"],
+  .ProseMirror th[data-cell-format="currency"] {
+    text-align: right;
+  }
+
+  /* Selected cell highlight */
+  .ProseMirror .selectedCell {
+    background-color: rgba(59, 130, 246, 0.08) !important;
+    outline: 2px solid #3b82f6 !important;
+    outline-offset: -1px;
+  }
+
+  .ProseMirror .selectedCell:after {
+    z-index: 2;
+    position: absolute;
+    content: '';
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    background: rgba(59, 130, 246, 0.06);
+    pointer-events: none;
+  }
+
+  /* Column resize handle */
+  .ProseMirror .column-resize-handle {
+    position: absolute;
+    right: -2px;
+    top: 0;
+    bottom: -2px;
+    width: 4px;
+    background-color: #3b82f6;
+    pointer-events: none;
+    z-index: 20;
+    border-radius: 2px;
+  }
+
+  .ProseMirror.resize-cursor {
+    cursor: col-resize;
   }
 
   .ProseMirror .selectedCell:after {
