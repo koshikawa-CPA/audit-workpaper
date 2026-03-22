@@ -159,6 +159,11 @@ export function RichTextEditor({
   const fileInputRef = useRef<HTMLInputElement>(null)
   // Always-current editor ref — avoids stale closure in callbacks
   const editorRef = useRef<ReturnType<typeof useEditor>>(null)
+  // Auto-save: dirty flag + debounce timer + stable save ref
+  const isDirtyRef = useRef(false)
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleSaveRef = useRef<() => Promise<void>>(async () => {})
 
   // ─── File upload + insert ─────────────────────────────────────────────────
 
@@ -325,6 +330,14 @@ export function RichTextEditor({
       if (!isApplyingRef.current && onChange) {
         onChange(e.getJSON() as Record<string, unknown>)
       }
+      // Debounce auto-save: mark dirty and schedule save 3s after last edit
+      if (!isApplyingRef.current && !readOnly) {
+        isDirtyRef.current = true
+        if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+        debounceTimerRef.current = setTimeout(() => {
+          handleSaveRef.current()
+        }, 3000)
+      }
     },
     onSelectionUpdate: ({ editor: e }) => {
       if (isApplyingRef.current) return
@@ -420,21 +433,46 @@ export function RichTextEditor({
   // ─── Save handlers ───────────────────────────────────────────────────────
 
   const handleSave = useCallback(async () => {
-    if (!editor || !onSave) return
+    const ed = editorRef.current
+    if (!ed || !onSave) return
+    // Cancel any pending debounce timer (covers both button click and timer fire)
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+      debounceTimerRef.current = null
+    }
     setSaving(true)
     try {
-      await onSave(editor.getJSON() as Record<string, unknown>)
+      await onSave(ed.getJSON() as Record<string, unknown>)
       setLastSaved(new Date())
+      isDirtyRef.current = false
     } finally {
       setSaving(false)
     }
-  }, [editor, onSave])
+  }, [onSave])
+
+  // Keep the stable ref current so the debounce closure always calls latest version
+  handleSaveRef.current = handleSave
+
+  // ─── beforeunload: warn when there are unsaved changes ───────────────────
 
   useEffect(() => {
     if (!onSave || readOnly) return
-    const interval = setInterval(handleSave, 30000)
-    return () => clearInterval(interval)
-  }, [handleSave, onSave, readOnly])
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      if (isDirtyRef.current) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      // Flush any pending debounce on unmount
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+        debounceTimerRef.current = null
+      }
+    }
+  }, [onSave, readOnly])
 
   // ─── Auto comma-format: apply when user leaves a table cell ──────────────
 
@@ -830,11 +868,13 @@ export function RichTextEditor({
                 {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
                 保存
               </button>
-              {lastSaved && (
+              {saving ? (
+                <span className="text-xs text-blue-500 ml-1 shrink-0">保存中...</span>
+              ) : lastSaved ? (
                 <span className="text-xs text-gray-400 ml-1 shrink-0">
-                  {lastSaved.toLocaleTimeString('ja-JP')}
+                  保存済み {lastSaved.toLocaleTimeString('ja-JP')}
                 </span>
-              )}
+              ) : null}
             </>
           )}
         </div>

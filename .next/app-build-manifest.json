@@ -45,13 +45,13 @@
       "static/chunks/main-app-37a17cd4085ff936.js",
       "static/chunks/app/(auth)/layout-fe4a5fe1e6d707fb.js"
     ],
-    "/(dashboard)/dashboard/page": [
+    "/(dashboard)/projects/new/page": [
       "static/chunks/webpack-c84e7b3dbc67fa68.js",
       "static/chunks/fd9d1056-1e7f81dfced47382.js",
       "static/chunks/23-b634306700ed337e.js",
       "static/chunks/main-app-37a17cd4085ff936.js",
       "static/chunks/231-a2e26f1fd41e2d53.js",
-      "static/chunks/app/(dashboard)/dashboard/page-02d10ef0472cb740.js"
+      "static/chunks/app/(dashboard)/projects/new/page-599358fd18385e90.js"
     ],
     "/(dashboard)/layout": [
       "static/chunks/webpack-c84e7b3dbc67fa68.js",
@@ -62,29 +62,13 @@
       "static/chunks/231-a2e26f1fd41e2d53.js",
       "static/chunks/app/(dashboard)/layout-e2bc74703226ba48.js"
     ],
-    "/(dashboard)/users/page": [
-      "static/chunks/webpack-c84e7b3dbc67fa68.js",
-      "static/chunks/fd9d1056-1e7f81dfced47382.js",
-      "static/chunks/23-b634306700ed337e.js",
-      "static/chunks/main-app-37a17cd4085ff936.js",
-      "static/chunks/454-5f1833da733c3864.js",
-      "static/chunks/app/(dashboard)/users/page-28e42074dc909a08.js"
-    ],
-    "/(dashboard)/projects/new/page": [
+    "/(dashboard)/dashboard/page": [
       "static/chunks/webpack-c84e7b3dbc67fa68.js",
       "static/chunks/fd9d1056-1e7f81dfced47382.js",
       "static/chunks/23-b634306700ed337e.js",
       "static/chunks/main-app-37a17cd4085ff936.js",
       "static/chunks/231-a2e26f1fd41e2d53.js",
-      "static/chunks/app/(dashboard)/projects/new/page-599358fd18385e90.js"
-    ],
-    "/(dashboard)/projects/page": [
-      "static/chunks/webpack-c84e7b3dbc67fa68.js",
-      "static/chunks/fd9d1056-1e7f81dfced47382.js",
-      "static/chunks/23-b634306700ed337e.js",
-      "static/chunks/main-app-37a17cd4085ff936.js",
-      "static/chunks/231-a2e26f1fd41e2d53.js",
-      "static/chunks/app/(dashboard)/projects/page-8e2351fdf9cf0cbe.js"
+      "static/chunks/app/(dashboard)/dashboard/page-02d10ef0472cb740.js"
     ],
     "/(dashboard)/workpapers/[id]/edit/page": [
       "static/chunks/webpack-c84e7b3dbc67fa68.js",
@@ -96,9 +80,25 @@
       "static/chunks/454-5f1833da733c3864.js",
       "static/chunks/231-a2e26f1fd41e2d53.js",
       "static/chunks/490-0f03b44b97fc1236.js",
-      "static/chunks/173-12c05369db3c0359.js",
+      "static/chunks/173-b8c9f87e2dd2cbda.js",
       "static/chunks/327-aeb6ca8b7a241cdb.js",
       "static/chunks/app/(dashboard)/workpapers/[id]/edit/page-956cb36cadd8a9e1.js"
+    ],
+    "/(dashboard)/projects/page": [
+      "static/chunks/webpack-c84e7b3dbc67fa68.js",
+      "static/chunks/fd9d1056-1e7f81dfced47382.js",
+      "static/chunks/23-b634306700ed337e.js",
+      "static/chunks/main-app-37a17cd4085ff936.js",
+      "static/chunks/231-a2e26f1fd41e2d53.js",
+      "static/chunks/app/(dashboard)/projects/page-8e2351fdf9cf0cbe.js"
+    ],
+    "/(dashboard)/users/page": [
+      "static/chunks/webpack-c84e7b3dbc67fa68.js",
+      "static/chunks/fd9d1056-1e7f81dfced47382.js",
+      "static/chunks/23-b634306700ed337e.js",
+      "static/chunks/main-app-37a17cd4085ff936.js",
+      "static/chunks/454-5f1833da733c3864.js",
+      "static/chunks/app/(dashboard)/users/page-28e42074dc909a08.js"
     ],
     "/(dashboard)/workpapers/new/page": [
       "static/chunks/webpack-c84e7b3dbc67fa68.js",
@@ -118,7 +118,7 @@
       "static/chunks/454-5f1833da733c3864.js",
       "static/chunks/231-a2e26f1fd41e2d53.js",
       "static/chunks/490-0f03b44b97fc1236.js",
-      "static/chunks/173-12c05369db3c0359.js",
+      "static/chunks/173-b8c9f87e2dd2cbda.js",
       "static/chunks/app/(dashboard)/workpapers/page-da8136b0377e8b0b.js"
     ],
     "/(dashboard)/workpapers/[id]/page": [
@@ -131,7 +131,7 @@
       "static/chunks/454-5f1833da733c3864.js",
       "static/chunks/231-a2e26f1fd41e2d53.js",
       "static/chunks/490-0f03b44b97fc1236.js",
-      "static/chunks/173-12c05369db3c0359.js",
+      "static/chunks/173-b8c9f87e2dd2cbda.js",
       "static/chunks/app/(dashboard)/workpapers/[id]/page-b9c6f6e163ff84f2.js"
     ]
   }

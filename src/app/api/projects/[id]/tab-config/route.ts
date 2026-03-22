@@ -41,7 +41,15 @@ const L1_L2_DEFAULTS: Array<{ title: string; l2Titles: string[] }> = [
   },
 ]
 
-const DEFAULT_L3_TITLES = ['A', 'A10', 'A11', 'A20', 'A30']
+const DEFAULT_L3_TITLES = ['1', '2', '3', '4', '5']
+
+// Old L3 defaults (before numeric titles)
+const OLD_DEFAULT_L3_TITLES = ['A', 'A10', 'A11', 'A20', 'A30']
+
+function hasOldDefaultL3(tabs: TabItem[]): boolean {
+  if (tabs.length !== OLD_DEFAULT_L3_TITLES.length) return false
+  return tabs.every((t, i) => t.title === OLD_DEFAULT_L3_TITLES[i])
+}
 
 // Old generic L2 titles used before per-L1 customization
 const OLD_GENERIC_L2_TITLES = [
@@ -108,6 +116,14 @@ function migrateOldConfig(config: TabConfig): { config: TabConfig; changed: bool
     // Create new L3 entries
     for (const l2 of newL2tabs) {
       newLayer3[`${l1.id}__${l2.id}`] = DEFAULT_L3_TITLES.map(title => ({ id: genId(), title }))
+    }
+  }
+
+  // Step 3: migrate L3 tabs that still use old default titles ['A','A10','A11','A20','A30']
+  for (const key of Object.keys(newLayer3)) {
+    if (hasOldDefaultL3(newLayer3[key])) {
+      changed = true
+      newLayer3[key] = DEFAULT_L3_TITLES.map(title => ({ id: genId(), title }))
     }
   }
 
