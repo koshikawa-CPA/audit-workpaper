@@ -13,6 +13,7 @@ import TableHeader from '@tiptap/extension-table-header'
 import Placeholder from '@tiptap/extension-placeholder'
 import { FormulaTableCell } from './FormulaTableCell'
 import { FileAttachmentNode } from './FileAttachmentNode'
+import { WorkpaperMentionNode } from './WorkpaperMentionNode'
 import { createClient } from '@/lib/supabase/client'
 import {
   evaluateFormula,
@@ -26,7 +27,7 @@ import {
   AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3,
   Table as TableIcon, Undo, Redo, Minus, Code, Quote, Save, Loader2,
   ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
-  Merge, Scissors, Trash2, Calculator, Paperclip,
+  Merge, Scissors, Trash2, Calculator, Paperclip, AtSign, LayoutList,
 } from 'lucide-react'
 
 // ─── Document helpers ────────────────────────────────────────────────────────
@@ -61,6 +62,13 @@ interface RichTextEditorProps {
   readOnly?: boolean
   placeholder?: string
   workpaperId?: string  // for registering uploads in workpaper_files
+  projectId?: string    // for @mention search (filters workpapers by project)
+}
+
+interface WorkpaperSearchResult {
+  id: string
+  title: string
+  workpaper_number: string
 }
 
 const ACCEPTED_MIME = [
@@ -140,6 +148,7 @@ export function RichTextEditor({
   readOnly = false,
   placeholder = '内容を入力してください...',
   workpaperId,
+  projectId,
 }: RichTextEditorProps) {
   const [saving, setSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
@@ -156,6 +165,20 @@ export function RichTextEditor({
   const fileInputRef = useRef<HTMLInputElement>(null)
   // Always-current editor ref — avoids stale closure in callbacks
   const editorRef = useRef<ReturnType<typeof useEditor>>(null)
+
+  // ─── @mention popup state ──────────────────────────────────────────────────
+  const [showMentionPopup, setShowMentionPopup] = useState(false)
+  const [mentionQuery, setMentionQuery] = useState('')
+  const [mentionPopupPos, setMentionPopupPos] = useState<{ x: number; y: number } | null>(null)
+  const [allWorkpapers, setAllWorkpapers] = useState<WorkpaperSearchResult[] | null>(null)
+  const [mentionResults, setMentionResults] = useState<WorkpaperSearchResult[]>([])
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
+  const mentionPopupRef = useRef<HTMLDivElement>(null)
+  // Stable refs for use inside event listeners without stale closures
+  const mentionResultsRef = useRef<WorkpaperSearchResult[]>([])
+  const selectedMentionIndexRef = useRef(0)
+  mentionResultsRef.current = mentionResults
+  selectedMentionIndexRef.current = selectedMentionIndex
 
   // ─── File upload + insert ─────────────────────────────────────────────────
 
@@ -229,6 +252,144 @@ export function RichTextEditor({
     }
   }, [workpaperId]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ─── @mention: filter results when query/workpapers change ───────────────
+
+  useEffect(() => {
+    if (!allWorkpapers) {
+      setMentionResults([])
+      return
+    }
+    const q = mentionQuery.toLowerCase()
+    const filtered = q
+      ? allWorkpapers.filter(
+          (w) =>
+            w.workpaper_number.toLowerCase().includes(q) ||
+            w.title.toLowerCase().includes(q)
+        )
+      : allWorkpapers
+    setMentionResults(filtered.slice(0, 8))
+    setSelectedMentionIndex(0)
+  }, [allWorkpapers, mentionQuery])
+
+  // ─── @mention: fetch workpapers when popup opens ──────────────────────────
+
+  useEffect(() => {
+    if (!showMentionPopup || allWorkpapers !== null) return
+    const url = projectId
+      ? `/api/workpapers?project_id=${projectId}`
+      : '/api/workpapers'
+    fetch(url)
+      .then((r) => r.json())
+      .then((data: unknown) => {
+        if (Array.isArray(data)) {
+          setAllWorkpapers(
+            data.map((w: WorkpaperSearchResult) => ({
+              id: w.id,
+              title: w.title,
+              workpaper_number: w.workpaper_number,
+            }))
+          )
+        }
+      })
+      .catch(console.error)
+  }, [showMentionPopup, projectId, allWorkpapers])
+
+  // ─── @mention: keyboard navigation (Escape/ArrowUp/Down/Enter) ───────────
+
+  // stable ref so the effect doesn't need insertWorkpaperMention in deps
+  const insertMentionRef = useRef<(w: WorkpaperSearchResult) => void>(() => {})
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!showMentionPopup) return
+      if (e.key === 'Escape') {
+        setShowMentionPopup(false)
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setSelectedMentionIndex((i) =>
+          Math.min(i + 1, mentionResultsRef.current.length - 1)
+        )
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSelectedMentionIndex((i) => Math.max(i - 1, 0))
+      } else if (e.key === 'Enter') {
+        const item = mentionResultsRef.current[selectedMentionIndexRef.current]
+        if (item) {
+          e.preventDefault()
+          insertMentionRef.current(item)
+        }
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [showMentionPopup])
+
+  // ─── @mention: close popup on outside click ───────────────────────────────
+
+  useEffect(() => {
+    if (!showMentionPopup) return
+    function onMouseDown(e: MouseEvent) {
+      if (
+        mentionPopupRef.current &&
+        !mentionPopupRef.current.contains(e.target as Node)
+      ) {
+        setShowMentionPopup(false)
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown)
+    return () => document.removeEventListener('mousedown', onMouseDown)
+  }, [showMentionPopup])
+
+  // ─── @mention: insert mention node + save reference ──────────────────────
+
+  const insertWorkpaperMention = useCallback(
+    (workpaper: WorkpaperSearchResult) => {
+      const ed = editorRef.current
+      if (!ed) return
+
+      const { $from } = ed.state.selection
+      const textBefore = $from.parent.textBetween(0, $from.parentOffset)
+      const atMatch = textBefore.match(/@(\S*)$/)
+      const queryLen = atMatch ? atMatch[0].length : 1
+      const from = $from.pos - queryLen
+      const to = $from.pos
+      const label = `${workpaper.workpaper_number} ${workpaper.title}`
+
+      ed.chain()
+        .focus()
+        .deleteRange({ from, to })
+        .insertContent({ type: 'workpaperMention', attrs: { id: workpaper.id, label } })
+        .run()
+
+      setShowMentionPopup(false)
+
+      // Save reference relationship to DB
+      if (workpaperId) {
+        fetch(`/api/workpapers/${workpaperId}/references`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to_workpaper_id: workpaper.id }),
+        }).catch(console.error)
+      }
+    },
+    [workpaperId]
+  )
+  insertMentionRef.current = insertWorkpaperMention
+
+  // ─── Summary table ────────────────────────────────────────────────────────
+
+  const insertSummaryTable = useCallback(() => {
+    const ed = editorRef.current
+    if (!ed) return
+    ed.chain()
+      .focus()
+      .insertContent(
+        '<table><thead><tr><th>項目</th><th>金額/数量</th><th>備考</th></tr></thead>' +
+          '<tbody><tr><td></td><td></td><td></td></tr></tbody></table>'
+      )
+      .run()
+  }, [])
+
   // ─── Apply formula from bar ─────────────────────────────────────────────
 
   const applyFormulaBar = useCallback((value: string) => {
@@ -288,6 +449,7 @@ export function RichTextEditor({
       TableHeader,
       FormulaTableCell,
       FileAttachmentNode,
+      WorkpaperMentionNode,
       Placeholder.configure({ placeholder }),
     ],
     content: content || '',
@@ -295,6 +457,20 @@ export function RichTextEditor({
     onUpdate: ({ editor: e }) => {
       if (!isApplyingRef.current && onChange) {
         onChange(e.getJSON() as Record<string, unknown>)
+      }
+      // @mention detection
+      if (!e.isEditable) return
+      const { $from } = e.state.selection
+      const textBefore = $from.parent.textBetween(0, $from.parentOffset)
+      const atMatch = textBefore.match(/@(\S*)$/)
+      if (atMatch) {
+        const query = atMatch[1]
+        setMentionQuery(query)
+        setShowMentionPopup(true)
+        const coords = e.view.coordsAtPos($from.pos)
+        setMentionPopupPos({ x: coords.left, y: coords.bottom + 4 })
+      } else {
+        setShowMentionPopup(false)
       }
     },
     onSelectionUpdate: ({ editor: e }) => {
@@ -710,6 +886,34 @@ export function RichTextEditor({
             }}
           />
 
+          <TDivider />
+
+          {/* @参照 button */}
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              editor.chain().focus().insertContent('@').run()
+            }}
+            title="調書を@メンションで参照"
+            className="flex items-center gap-1 px-2 py-1 rounded text-xs text-blue-600 hover:bg-blue-50 transition-colors font-medium"
+          >
+            <AtSign className="h-3.5 w-3.5" />
+            参照
+          </button>
+
+          {/* サマリー表 button */}
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={insertSummaryTable}
+            title="サマリーテーブルを挿入（項目・金額/数量・備考）"
+            className="flex items-center gap-1 px-2 py-1 rounded text-xs text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            <LayoutList className="h-3.5 w-3.5" />
+            サマリー表
+          </button>
+
           {onSave && (
             <>
               <TDivider />
@@ -885,6 +1089,58 @@ export function RichTextEditor({
 
         <EditorContent editor={editor} />
       </div>
+
+      {/* ── @mention popup ── */}
+      {showMentionPopup && mentionPopupPos && (
+        <div
+          ref={mentionPopupRef}
+          className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200 py-1 w-72"
+          style={{ left: mentionPopupPos.x, top: mentionPopupPos.y }}
+        >
+          <div className="px-3 py-1.5 border-b border-gray-100 flex items-center gap-1.5">
+            <AtSign className="h-3 w-3 text-blue-500 shrink-0" />
+            <p className="text-xs text-gray-500 truncate">
+              {mentionQuery
+                ? `「${mentionQuery}」で検索中`
+                : '調書番号または調書名で検索'}
+            </p>
+          </div>
+          {allWorkpapers === null ? (
+            <div className="px-3 py-3 text-sm text-gray-400 text-center flex items-center justify-center gap-1.5">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              読み込み中...
+            </div>
+          ) : mentionResults.length === 0 ? (
+            <div className="px-3 py-3 text-sm text-gray-400 text-center">
+              該当する調書がありません
+            </div>
+          ) : (
+            <ul className="max-h-52 overflow-y-auto">
+              {mentionResults.map((w, i) => (
+                <li key={w.id}>
+                  <button
+                    type="button"
+                    className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-baseline gap-1.5 ${
+                      i === selectedMentionIndex
+                        ? 'bg-blue-50 text-blue-800'
+                        : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      insertWorkpaperMention(w)
+                    }}
+                  >
+                    <span className="font-mono text-xs text-gray-400 shrink-0">
+                      {w.workpaper_number}
+                    </span>
+                    <span className="truncate">{w.title}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* ── Cell context menu ── */}
       {cellContextMenu && (

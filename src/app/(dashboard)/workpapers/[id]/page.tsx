@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import type { Workpaper, Profile } from '@/types'
 import { Edit, Lock, ArrowLeft, Calendar, User, Hash, Tag } from 'lucide-react'
+import { WorkpaperReferences } from '@/components/workpaper/WorkpaperReferences'
 
 export const dynamic = 'force-dynamic'
 
@@ -225,6 +226,9 @@ export default async function WorkpaperDetailPage({
               currentProfile={currentProfile}
               isProjectLocked={isLocked}
             />
+
+            {/* Reference relationships */}
+            <WorkpaperReferences workpaperId={params.id} />
           </div>
 
           {/* Sidebar */}

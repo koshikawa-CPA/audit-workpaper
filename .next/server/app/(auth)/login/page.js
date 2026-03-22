@@ -44,7 +44,7 @@
           disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed
           ${t?"border-red-300 focus:ring-red-500 focus:border-red-500":"border-gray-300"}
           ${n}
-        `,...o}),t&&s.jsx("p",{className:"text-sm text-red-600",children:t}),r&&!t&&s.jsx("p",{className:"text-sm text-gray-500",children:r})]})}r(7577)},9701:(e,t,r)=>{"use strict";r.d(t,{e:()=>a});var s=r(861);function a(){return(0,s.createBrowserClient)("https://jdbosfyrxichvatpsmer.supabase.co","sb_publishable_N63zVkg2rigNiCNCODTbKw_DKoXZM_3")}},7162:(e,t,r)=>{"use strict";r.d(t,{Z:()=>i});var s=r(1159);/**
+        `,...o}),t&&s.jsx("p",{className:"text-sm text-red-600",children:t}),r&&!t&&s.jsx("p",{className:"text-sm text-gray-500",children:r})]})}r(7577)},9701:(e,t,r)=>{"use strict";r.d(t,{e:()=>a});var s=r(861);function a(){return(0,s.createBrowserClient)("https://ejsgzzftkoqpgivfasqf.supabase.co","sb_publishable_9LibImHAbiInbFUSxNKEeA_3yw5XZii")}},7162:(e,t,r)=>{"use strict";r.d(t,{Z:()=>i});var s=r(1159);/**
  * @license lucide-react v0.395.0 - ISC
  *
  * This source code is licensed under the ISC license.

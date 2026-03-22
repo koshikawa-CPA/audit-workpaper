@@ -1,1 +1,1 @@
-{"version":1,"functions":{"/dashboard":{},"/projects":{},"/workpapers/new":{},"/workpapers/[id]":{},"/workpapers":{},"/users":{},"/workpapers/[id]/edit":{}}}
+{"version":1,"functions":{"/workpapers/[id]/edit":{},"/dashboard":{},"/workpapers/new":{},"/projects":{},"/users":{},"/workpapers":{},"/workpapers/[id]":{}}}

@@ -1,12 +1,13 @@
 {
   "/_not-found/page": "app/_not-found/page.js",
-  "/api/invitations/route": "app/api/invitations/route.js",
   "/api/invitations/accept/route": "app/api/invitations/accept/route.js",
+  "/api/invitations/route": "app/api/invitations/route.js",
   "/api/projects/[id]/lock/route": "app/api/projects/[id]/lock/route.js",
   "/api/projects/[id]/tab-config/route": "app/api/projects/[id]/tab-config/route.js",
   "/api/projects/route": "app/api/projects/route.js",
   "/api/workpapers/[id]/check/route": "app/api/workpapers/[id]/check/route.js",
   "/api/workpapers/[id]/files/route": "app/api/workpapers/[id]/files/route.js",
+  "/api/workpapers/[id]/references/route": "app/api/workpapers/[id]/references/route.js",
   "/api/workpapers/[id]/route": "app/api/workpapers/[id]/route.js",
   "/api/workpapers/by-tab/route": "app/api/workpapers/by-tab/route.js",
   "/api/workpapers/route": "app/api/workpapers/route.js",
@@ -15,10 +16,10 @@
   "/(auth)/login/page": "app/(auth)/login/page.js",
   "/(dashboard)/projects/new/page": "app/(dashboard)/projects/new/page.js",
   "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
+  "/(dashboard)/projects/page": "app/(dashboard)/projects/page.js",
+  "/(dashboard)/users/page": "app/(dashboard)/users/page.js",
   "/(dashboard)/workpapers/[id]/edit/page": "app/(dashboard)/workpapers/[id]/edit/page.js",
   "/(dashboard)/workpapers/new/page": "app/(dashboard)/workpapers/new/page.js",
-  "/(dashboard)/users/page": "app/(dashboard)/users/page.js",
   "/(dashboard)/workpapers/page": "app/(dashboard)/workpapers/page.js",
-  "/(dashboard)/workpapers/[id]/page": "app/(dashboard)/workpapers/[id]/page.js",
-  "/(dashboard)/projects/page": "app/(dashboard)/projects/page.js"
+  "/(dashboard)/workpapers/[id]/page": "app/(dashboard)/workpapers/[id]/page.js"
 }
