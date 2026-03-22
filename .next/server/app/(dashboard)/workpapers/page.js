@@ -42,4 +42,4 @@
         bg-white rounded-lg border border-gray-200 shadow-sm
         ${s[r]}
         ${t}
-      `,children:e})}function n({children:e,className:t=""}){return a.jsx("div",{className:`flex items-center justify-between mb-4 ${t}`,children:e})}function o({children:e,className:t=""}){return a.jsx("h3",{className:`text-lg font-semibold text-gray-900 ${t}`,children:e})}}};var t=require("../../../webpack-runtime.js");t.C(e);var r=e=>t(t.s=e),a=t.X(0,[276,702,471,334,130,23,557],()=>r(6522));module.exports=a})();
+      `,children:e})}function n({children:e,className:t=""}){return a.jsx("div",{className:`flex items-center justify-between mb-4 ${t}`,children:e})}function o({children:e,className:t=""}){return a.jsx("h3",{className:`text-lg font-semibold text-gray-900 ${t}`,children:e})}}};var t=require("../../../webpack-runtime.js");t.C(e);var r=e=>t(t.s=e),a=t.X(0,[276,702,471,334,130,363,557],()=>r(6522));module.exports=a})();

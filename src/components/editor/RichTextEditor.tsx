@@ -27,7 +27,7 @@ import {
   AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3,
   Table as TableIcon, Undo, Redo, Minus, Code, Quote, Save, Loader2,
   ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
-  Merge, Scissors, Trash2, Calculator, Paperclip, LayoutList, Type,
+  Merge, Scissors, Trash2, Calculator, Paperclip, LayoutList,
 } from 'lucide-react'
 
 // ─── Document helpers ────────────────────────────────────────────────────────
@@ -246,12 +246,12 @@ export function RichTextEditor({
 
   // ─── Text box ─────────────────────────────────────────────────────────────
 
-  const insertTextBox = useCallback(() => {
+  const insertTextBox = useCallback((slashPosition: 'left' | 'right') => {
     const ed = editorRef.current
     if (!ed) return
     ed.chain()
       .focus()
-      .insertContent({ type: 'textBox', content: [{ type: 'paragraph' }] })
+      .insertContent({ type: 'textBox', attrs: { slashPosition, userText: '' } })
       .run()
   }, [])
 
@@ -739,16 +739,26 @@ export function RichTextEditor({
 
           <TDivider />
 
-          {/* テキストボックス button */}
+          {/* /○ 左スラッシュ テキストボックス */}
           <button
             type="button"
             onMouseDown={(e) => e.preventDefault()}
-            onClick={insertTextBox}
-            title="テキストボックスを挿入（赤字・枠線なし）"
-            className="flex items-center gap-1 px-2 py-1 rounded text-xs text-red-600 hover:bg-red-50 transition-colors"
+            onClick={() => insertTextBox('left')}
+            title="左スラッシュ テキストボックスを挿入 (/○)"
+            className="flex items-center gap-0.5 px-2 py-1 rounded text-xs text-red-600 hover:bg-red-50 transition-colors font-mono font-bold"
           >
-            <Type className="h-3.5 w-3.5" />
-            テキストボックス
+            /○
+          </button>
+
+          {/* ○/ 右スラッシュ テキストボックス */}
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => insertTextBox('right')}
+            title="右スラッシュ テキストボックスを挿入 (○/)"
+            className="flex items-center gap-0.5 px-2 py-1 rounded text-xs text-red-600 hover:bg-red-50 transition-colors font-mono font-bold"
+          >
+            ○/
           </button>
 
           {/* サマリー表 button */}
