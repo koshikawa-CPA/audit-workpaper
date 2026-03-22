@@ -382,72 +382,67 @@ export function RichTextEditor({
     const ed = editor
     const dom = ed.view.dom as HTMLElement
 
-    // State for row drag
     let rowDrag: {
       startY: number
       startHeight: number
       trEl: HTMLTableRowElement
     } | null = null
 
-    function setCursor(c: string) {
-      dom.style.cursor = c
-    }
+    function setCursor(c: string) { dom.style.cursor = c }
+
+    // ── Cursor feedback while hovering ───────────────────────────────────────
 
     function onMouseMove(e: MouseEvent) {
-      if (rowDrag) return  // document handler manages cursor during drag
+      if (rowDrag) return  // document-level handler owns cursor during drag
 
       const target = e.target as HTMLElement
 
-      // Column resize handle hover
       if (target.classList.contains('column-resize-handle') ||
-          target.closest('.column-resize-handle')) {
+          !!target.closest('.column-resize-handle')) {
         setCursor('col-resize')
         return
       }
 
       const cell = target.closest('td, th') as HTMLElement | null
-      if (!cell) {
-        setCursor('')
-        return
-      }
+      if (!cell) { setCursor(''); return }
 
       const rect = cell.getBoundingClientRect()
-      const nearBottom = e.clientY >= rect.bottom - BORDER_HIT
-      const nearTop = e.clientY <= rect.top + BORDER_HIT
-      const nearRight = e.clientX >= rect.right - BORDER_HIT
-
-      if (nearBottom || nearTop) {
+      if (e.clientY >= rect.bottom - BORDER_HIT) {
         setCursor('row-resize')
-      } else if (nearRight) {
+      } else if (e.clientX >= rect.right - BORDER_HIT) {
         setCursor('col-resize')
       } else {
         setCursor('')
       }
     }
 
-    function onMouseLeave() {
-      if (!rowDrag) setCursor('')
-    }
+    function onMouseLeave() { if (!rowDrag) setCursor('') }
+
+    // ── Row drag start ────────────────────────────────────────────────────────
 
     function onMouseDown(e: MouseEvent) {
       const target = e.target as HTMLElement
-      // Don't capture clicks on column-resize-handle (TipTap manages those)
       if (target.classList.contains('column-resize-handle') ||
-          target.closest('.column-resize-handle')) return
+          !!target.closest('.column-resize-handle')) return
 
       const cell = target.closest('td, th') as HTMLElement | null
       if (!cell) return
 
       const rect = cell.getBoundingClientRect()
-      const nearBottom = e.clientY >= rect.bottom - BORDER_HIT
-      const nearTop = e.clientY <= rect.top + BORDER_HIT
-      if (!nearBottom && !nearTop) return
+      // Only handle the bottom border of a row.
+      // Do NOT handle nearTop — the top of row N is the bottom of row N-1,
+      // which is already handled when that row's bottom is hovered.
+      if (e.clientY < rect.bottom - BORDER_HIT) return
 
-      e.preventDefault()
-      e.stopPropagation()
-
-      const tr = cell.closest('tr') as HTMLTableRowElement
+      const tr = cell.closest('tr') as HTMLTableRowElement | null
       if (!tr) return
+
+      // ⚠️ Do NOT call e.preventDefault() here.
+      // preventDefault on mousedown prevents TipTap from properly placing the
+      // cursor, which leaves it in a half-processed state and causes multi-cell
+      // selection on subsequent clicks.
+      // Instead, user-select:none is applied in onDocMove to prevent text
+      // selection during the actual drag movement.
 
       rowDrag = {
         startY: e.clientY,
@@ -458,19 +453,32 @@ export function RichTextEditor({
       document.addEventListener('mouseup', onDocUp)
     }
 
+    // ── Drag in progress ──────────────────────────────────────────────────────
+
     function onDocMove(e: MouseEvent) {
       if (!rowDrag) return
+      e.preventDefault()  // prevent text selection during drag movement
+      document.body.style.userSelect = 'none'
       document.body.style.cursor = 'row-resize'
+
       const delta = e.clientY - rowDrag.startY
       const newH = Math.max(20, rowDrag.startHeight + delta)
+
+      // Set height on <tr> AND on every cell — CSS `height` on <tr> alone is
+      // not reliable; the cells' height ultimately determines the row height.
       rowDrag.trEl.style.height = newH + 'px'
-      rowDrag.trEl.style.minHeight = newH + 'px'
+      for (const cell of Array.from(rowDrag.trEl.cells)) {
+        (cell as HTMLElement).style.height = newH + 'px'
+      }
     }
+
+    // ── Drag end ──────────────────────────────────────────────────────────────
 
     function onDocUp(e: MouseEvent) {
       if (!rowDrag) return
       document.removeEventListener('mousemove', onDocMove)
       document.removeEventListener('mouseup', onDocUp)
+      document.body.style.userSelect = ''
       document.body.style.cursor = ''
 
       const delta = e.clientY - rowDrag.startY
@@ -478,9 +486,9 @@ export function RichTextEditor({
       const trEl = rowDrag.trEl
       rowDrag = null
 
-      // Persist height into ProseMirror doc via ResizableTableRow attribute
+      // Commit height to ProseMirror doc via ResizableTableRow so it persists
       try {
-        const firstCell = trEl.querySelector('td, th')
+        const firstCell = trEl.cells[0]
         if (firstCell) {
           const pos = ed.view.posAtDOM(firstCell, 0)
           const $pos = ed.state.doc.resolve(pos)
@@ -488,10 +496,10 @@ export function RichTextEditor({
             const node = $pos.node(d)
             if (node.type.name === 'tableRow') {
               const rowPos = $pos.before(d)
-              ed.chain().command(({ tr, dispatch }) => {
+              ed.chain().command(({ tr: pmTr, dispatch }) => {
                 if (!dispatch) return false
-                tr.setNodeMarkup(rowPos, null, { ...node.attrs, height: newH + 'px' })
-                dispatch(tr)
+                pmTr.setNodeMarkup(rowPos, null, { ...node.attrs, height: newH + 'px' })
+                dispatch(pmTr)
                 return true
               }).run()
               break
@@ -513,8 +521,8 @@ export function RichTextEditor({
       dom.removeEventListener('mousedown', onMouseDown)
       document.removeEventListener('mousemove', onDocMove)
       document.removeEventListener('mouseup', onDocUp)
-      // Reset drag state so a re-mount doesn't leave stale document listeners
       rowDrag = null
+      document.body.style.userSelect = ''
       document.body.style.cursor = ''
     }
   }, [editor, readOnly])

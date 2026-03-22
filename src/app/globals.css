@@ -103,11 +103,15 @@
     font-size: 0.875rem;
     min-width: 40px;
     position: relative;
+    /* Allow JavaScript row-resize to override cell height */
+    box-sizing: border-box;
+    overflow: hidden;
   }
 
   .ProseMirror tr,
   .prose tr {
     border: 1px solid #d1d5db !important;
+    /* height/min-height set by ResizableTableRow or JS drag are respected */
   }
 
   /* Formula cell indicator */
