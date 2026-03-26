@@ -25,8 +25,7 @@ export default function LoginPage() {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw error
-      router.push('/dashboard')
-      router.refresh()
+      window.location.href = '/dashboard'
     } catch (err) {
       const message = err instanceof Error ? err.message : 'エラーが発生しました'
       if (message.includes('Invalid login credentials')) {
